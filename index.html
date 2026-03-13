@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>班级日志 · 学生版</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+        }
+        body {
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+            overflow: hidden;
+            padding: 24px;
+        }
+        h1, h2 {
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1e293b;
+        }
+        .card {
+            background: #f8fafc;
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid #e2e8f0;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 14px 18px;
+            border: 1px solid #cbd5e1;
+            border-radius: 60px;
+            font-size: 16px;
+            outline: none;
+            transition: 0.2s;
+            margin-bottom: 16px;
+        }
+        input:focus, textarea:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+        }
+        textarea {
+            border-radius: 24px;
+            resize: vertical;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+        }
+        button:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+        }
+        .logout-btn {
+            background: #ef4444;
+            box-shadow: 0 4px 12px rgba(239,68,68,0.3);
+            float: right;
+        }
+        .logout-btn:hover {
+            background: #dc2626;
+        }
+        .log-entry {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+        .log-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #64748b;
+            border-bottom: 1px dashed #e2e8f0;
+            padding-bottom: 8px;
+        }
+        .log-author {
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .log-time {
+            font-style: italic;
+        }
+        .log-content {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #1e293b;
+        }
+        .nav-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .nav-btn {
+            background: #e2e8f0;
+            color: #1e293b;
+            box-shadow: none;
+            flex: 1;
+        }
+        .nav-btn.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .user-badge {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 8px 16px;
+            border-radius: 60px;
+            font-weight: 500;
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+        hr {
+            border: none;
+            border-top: 2px solid #e2e8f0;
+            margin: 24px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container" id="app">
+    <!-- 动态内容由 JavaScript 渲染 -->
+</div>
+
+<script>
+    (function() {
+        // ---------- 模拟数据库 ----------
+        const STORAGE_KEYS = {
+            USERS: 'class_journal_users',
+            POSTS: 'class_journal_posts',
+            CURRENT_USER: 'class_journal_current_user'
+        };
+
+        // 初始化默认用户 (学号/密码都是 student1, student2, teacher)
+        const defaultUsers = [
+            { username: 'student1', password: '1', name: '李小乐' },
+            { username: 'student2', password: '2', name: '张子轩' },
+            { username: 'teacher', password: '123456', name: '王老师' }
+        ];
+
+        // 初始化日志样例
+        const defaultPosts = [
+            {
+                id: '1',
+                author: '李小乐',
+                username: 'student1',
+                content: '今天数学课老师讲了一道有趣的奥数题，大家都听得很认真。',
+                time: '2025-03-13 09:45'
+            },
+            {
+                id: '2',
+                author: '张子轩',
+                username: 'student2',
+                content: '体育课我们班和隔壁班打了场篮球赛，最后赢了！',
+                time: '2025-03-13 11:20'
+            }
+        ];
+
+        // 加载或初始化数据
+        let users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS));
+        if (!users || users.length === 0) {
+            users = defaultUsers;
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+        }
+
+        let posts = JSON.parse(localStorage.getItem(STORAGE_KEYS.POSTS));
+        if (!posts || posts.length === 0) {
+            posts = defaultPosts;
+            localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(posts));
+        }
+
+        let currentUser = JSON.parse(localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) || null;
+
+        // ---------- 工具函数 ----------
+        function savePosts() {
+            localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(posts));
+        }
+
+        function saveCurrentUser() {
+            if (currentUser) {
+                localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+            }
+        }
+
+        // 获取当前时间 (YYYY-MM-DD HH:MM)
+        function getCurrentTime() {
+            const d = new Date();
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const hour = String(d.getHours()).padStart(2, '0');
+            const minute = String(d.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hour}:${minute}`;
+        }
+
+        // ---------- 页面渲染引擎 ----------
+        const app = document.getElementById('app');
+
+        function render() {
+            if (!currentUser) {
+                renderLogin();
+            } else {
+                renderMainApp();
+            }
+        }
+
+        // 登录页
+        function renderLogin() {
+            app.innerHTML = `
+                <h1>📘 班级日志 · 登录</h1>
+                <div class="card">
+                    <input type="text" id="username" placeholder="学号 / 用户名" value="student1">
+                    <input type="password" id="password" placeholder="密码" value="1">
+                    <button id="loginBtn">登录</button>
+                </div>
+                <div style="color:#475569; font-size:14px; text-align:center;">
+                    默认账号: student1/1, student2/2, teacher/123456
+                </div>
+            `;
+
+            document.getElementById('loginBtn').addEventListener('click', () => {
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value.trim();
+                const user = users.find(u => u.username === username && u.password === password);
+                if (user) {
+                    // 登录成功，保存用户信息（不保存密码到currentUser对象）
+                    const { password, ...safeUser } = user;
+                    currentUser = safeUser;
+                    saveCurrentUser();
+                    render();
+                } else {
+                    alert('用户名或密码错误');
+                }
+            });
+        }
+
+        // 主应用 (登录后)
+        function renderMainApp() {
+            const postsHtml = posts.sort((a, b) => b.time.localeCompare(a.time)).map(p => `
+                <div class="log-entry">
+                    <div class="log-meta">
+                        <span class="log-author">✍️ ${p.author}</span>
+                        <span class="log-time">🕒 ${p.time}</span>
+                    </div>
+                    <div class="log-content">${p.content.replace(/\n/g, '<br>')}</div>
+                </div>
+            `).join('') || '<p style="color:#94a3b8; text-align:center;">暂无日志，快去写下第一篇吧！</p>';
+
+            app.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h1 style="margin:0;">📓 班级日志</h1>
+                    <button class="logout-btn" id="logoutBtn">退出登录</button>
+                </div>
+                <div class="user-badge">👋 欢迎，${currentUser.name} (${currentUser.username})</div>
+
+                <div class="nav-bar">
+                    <button class="nav-btn active" id="viewPostsBtn">📋 所有日志</button>
+                    <button class="nav-btn" id="newPostBtn">✏️ 写新日志</button>
+                </div>
+
+                <div id="viewPostsPanel" style="display: block;">
+                    <h2>📌 全部日志（从早到晚）</h2>
+                    ${postsHtml}
+                </div>
+
+                <div id="newPostPanel" style="display: none;">
+                    <h2>📝 记录今天班级的事</h2>
+                    <textarea id="postContent" rows="5" placeholder="今天班里发生了什么？写下来吧..."></textarea>
+                    <button id="submitPost">发布日志</button>
+                </div>
+            `;
+
+            // 切换标签
+            const viewBtn = document.getElementById('viewPostsBtn');
+            const newBtn = document.getElementById('newPostBtn');
+            const viewPanel = document.getElementById('viewPostsPanel');
+            const newPanel = document.getElementById('newPostPanel');
+
+            viewBtn.addEventListener('click', () => {
+                viewBtn.classList.add('active');
+                newBtn.classList.remove('active');
+                viewPanel.style.display = 'block';
+                newPanel.style.display = 'none';
+            });
+
+            newBtn.addEventListener('click', () => {
+                newBtn.classList.add('active');
+                viewBtn.classList.remove('active');
+                newPanel.style.display = 'block';
+                viewPanel.style.display = 'none';
+            });
+
+            // 发布日志
+            document.getElementById('submitPost')?.addEventListener('click', () => {
+                const content = document.getElementById('postContent').value.trim();
+                if (!content) {
+                    alert('内容不能为空');
+                    return;
+                }
+                const newPost = {
+                    id: Date.now().toString(),
+                    author: currentUser.name,
+                    username: currentUser.username,
+                    content: content,
+                    time: getCurrentTime()
+                };
+                posts.push(newPost);
+                savePosts();
+                document.getElementById('postContent').value = ''; // 清空
+                alert('发布成功！');
+                // 切换到查看面板并刷新列表
+                viewBtn.click();
+                renderMainApp(); // 简单重新渲染
+            });
+
+            // 退出登录
+            document.getElementById('logoutBtn').addEventListener('click', () => {
+                currentUser = null;
+                saveCurrentUser();
+                render();
+            });
+        }
+
+        // 初始渲染
+        render();
+    })();
+</script>
+</body>
+</html>
