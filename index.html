@@ -81,6 +81,69 @@ tr.ok { background: #e8f5e9; }
 .section-divider { height: 3px; background: linear-gradient(90deg, transparent, #00b4db, transparent); margin: 25px 0; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .animated { animation: pulse 2s infinite; }
+.interactive-panel { padding: 20px; }
+.slider-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.slider-row label { width: 120px; font-size: 13px; font-weight: 600; }
+.slider-row input[type="range"] { flex: 1; height: 8px; -webkit-appearance: none; background: #ddd; border-radius: 5px; }
+.slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #0083b0; cursor: pointer; }
+.slider-row .val { width: 60px; text-align: center; font-weight: bold; color: #0083b0; }
+.slider-row .cap { width: 60px; text-align: center; font-size: 11px; color: #999; }
+.station-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; margin: 5px 0; background: #f8f9fa; transition: all 0.3s; }
+.station-row.highlight { background: #fff3e0; border: 2px solid #ff9800; }
+.station-row.selected { background: #e3f2fd; border: 2px solid #2196f3; }
+.station-row .station-id { font-weight: bold; width: 45px; }
+.station-row .station-name { width: 90px; font-size: 12px; }
+.station-row .station-type { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #e0e0e0; }
+.station-row .inv-display { display: flex; align-items: center; gap: 8px; flex: 1; }
+.station-row .inv-bar { height: 8px; border-radius: 4px; background: #e0e0e0; flex: 1; max-width: 200px; overflow: hidden; }
+.station-row .inv-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.station-row .inv-fill.safe { background: #4caf50; }
+.station-row .inv-fill.low { background: #f44336; }
+.station-row .inv-fill.high { background: #ff9800; }
+.station-row .inv-value { width: 60px; text-align: right; font-weight: bold; }
+.station-row .inv-cap { color: #999; font-size: 12px; }
+.station-row .adjust-controls { display: flex; gap: 4px; }
+.station-row .adjust-btn { width: 28px; height: 28px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
+.station-row .adjust-btn:hover { background: #e3f2fd; }
+.station-row .adjust-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.station-row .transfer-btn { padding: 4px 10px; border: none; border-radius: 4px; background: #0083b0; color: white; cursor: pointer; font-size: 12px; }
+.transfer-mode-banner { background: linear-gradient(90deg, #ff9800, #ff5722); color: white; padding: 12px 20px; border-radius: 10px; text-align: center; font-weight: bold; margin: 15px 0; animation: pulse 1.5s infinite; }
+.transfer-source-select { display: flex; gap: 15px; align-items: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin: 15px 0; flex-wrap: wrap; }
+.transfer-source-select select { padding: 8px 12px; border: 2px solid #ddd; border-radius: 6px; min-width: 120px; }
+.transfer-source-select input[type="number"] { width: 80px; padding: 8px; border: 2px solid #ddd; border-radius: 6px; text-align: center; }
+.station-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin: 15px 0; }
+.station-card { background: #f8f9fa; border-radius: 10px; padding: 15px; border: 2px solid transparent; transition: all 0.3s; }
+.station-card:hover { border-color: #0083b0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.station-card .sc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.station-card .sc-id { font-weight: bold; font-size: 16px; }
+.station-card .sc-type { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e0e0e0; }
+.station-card .sc-name { font-size: 13px; color: #666; margin-bottom: 8px; }
+.station-card .sc-inv { font-size: 28px; font-weight: bold; text-align: center; margin: 10px 0; }
+.station-card .sc-inv .unit { font-size: 14px; color: #666; }
+.station-card .sc-bar { height: 10px; border-radius: 5px; background: #e0e0e0; overflow: hidden; margin: 8px 0; }
+.station-card .sc-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+.station-card .sc-fill.safe { background: linear-gradient(90deg, #4caf50, #81c784); }
+.station-card .sc-fill.low { background: linear-gradient(90deg, #f44336, #e57373); }
+.station-card .sc-fill.high { background: linear-gradient(90deg, #ff9800, #ffb74d); }
+.station-card .sc-info { display: flex; justify-content: space-between; font-size: 11px; color: #666; }
+.station-card .sc-actions { display: flex; gap: 5px; margin-top: 10px; }
+.station-card .sc-actions button { flex: 1; padding: 6px; border: 1px solid #ddd; background: white; border-radius: 5px; cursor: pointer; font-size: 12px; }
+.station-card .sc-actions button:hover { background: #e3f2fd; }
+.station-card .sc-actions .btn-primary { background: #0083b0; color: white; border-color: #0083b0; }
+.station-card .sc-actions .btn-primary:hover { background: #006978; }
+.result-panel { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border-radius: 12px; padding: 20px; margin: 15px 0; }
+.result-panel.fail { background: linear-gradient(135deg, #ffebee, #ffcdd2); }
+.result-panel.warn { background: linear-gradient(135deg, #fff3e0, #ffe0b2); }
+.result-panel h4 { margin-bottom: 10px; }
+.progress-ring { display: inline-block; width: 80px; height: 80px; position: relative; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring .progress-ring-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; font-size: 18px; }
+.batch-controls { display: flex; gap: 10px; flex-wrap: wrap; padding: 15px; background: #e3f2fd; border-radius: 10px; margin: 10px 0; }
+.batch-controls button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.batch-controls .btn-apply { background: #0083b0; color: white; }
+.batch-controls .btn-reset { background: #ff5722; color: white; }
+.dragging { cursor: grabbing !important; }
+.drop-target { animation: pulse 0.8s infinite; }
 </style>
 </head>
 <body>
@@ -97,6 +160,7 @@ tr.ok { background: #e8f5e9; }
     <button class="tab-btn" data-tab="problem3">🚛 问题三：路线规划</button>
     <button class="tab-btn" data-tab="simulation">▶️ 动态模拟</button>
     <button class="tab-btn" data-tab="sensitivity">📈 敏感性分析</button>
+    <button class="tab-btn" data-tab="interactive">🎮 互动调度</button>
   </div>
 
   <!-- 数据概览 -->
