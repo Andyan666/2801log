@@ -281,7 +281,7 @@ tr.ok { background: #e8f5e9; }
       <button onclick="interactiveAutoSched()" style="background:#4caf50;">⚡ 应用自动调度方案</button>
       <button onclick="interactiveRunSim()" style="background:#0083b0;">▶️ 运行模拟预测</button>
       <label style="margin-left:auto;">需求系数：</label>
-      <input type="number" id="interactiveFactor" value="1" min="0.5" max="1.5" step="0.1" style="width:70px;">
+      <input type="number" id="interactiveFactor" value="1" min="0.5" max="1.5" step="0.1" style="width:70px;" onchange="if(interactiveState) interactiveShowResult()">
     </div>
 
     <div class="batch-controls">
@@ -1432,6 +1432,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (tab === 'problem3') initProblem3();
     if (tab === 'simulation') { initSimulation(); }
     if (tab === 'sensitivity') initSensitivity();
+    if (tab === 'interactive') initInteractive();
   });
 });
 
@@ -1457,6 +1458,474 @@ window.addEventListener('DOMContentLoaded', () => {
     timelineBg.parentElement.appendChild(label);
   }
 });
+
+// ============ 互动调度 ============
+let interactiveState = null;
+
+function initInteractive() {
+  if (interactiveState) {
+    renderInteractiveMap();
+    renderStationList();
+    updateInteractiveStats();
+    interactiveShowResult();
+    return;
+  }
+  interactiveState = {
+    inventory: {},
+    transfers: [],
+    lastResult: null
+  };
+  stations.forEach(s => interactiveState.inventory[s.id] = s.init);
+  renderInteractiveMap();
+  renderStationList();
+  updateInteractiveStats();
+  interactiveShowResult();
+}
+
+function renderInteractiveMap() {
+  const inv = {};
+  stations.forEach(s => inv[s.id] = interactiveState.inventory[s.id]);
+  const container = document.getElementById('interactiveMap');
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const padding = 40;
+  const svgNS = "http://www.w3.org/2000/svg";
+  let svg = container.querySelector('svg');
+  if (svg) svg.remove();
+  svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  const scaleX = (x) => padding + (x / 5) * (width - 2 * padding);
+  const scaleY = (y) => height - padding - (y / 5) * (height - 2 * padding);
+
+  // 网格
+  for (let gx = 0; gx <= 5; gx++) {
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', scaleX(gx)); line.setAttribute('y1', scaleY(0));
+    line.setAttribute('x2', scaleX(gx)); line.setAttribute('y2', scaleY(5));
+    line.setAttribute('stroke', '#e8e8e8'); svg.appendChild(line);
+  }
+  for (let gy = 0; gy <= 5; gy++) {
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', scaleX(0)); line.setAttribute('y1', scaleY(gy));
+    line.setAttribute('x2', scaleX(5)); line.setAttribute('y2', scaleY(gy));
+    line.setAttribute('stroke', '#e8e8e8'); svg.appendChild(line);
+  }
+
+  // 渲染搬运线
+  interactiveState.transfers.forEach(t => {
+    const s1 = getStation(t.from), s2 = getStation(t.to);
+    if (!s1 || !s2) return;
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', scaleX(s1.x)); line.setAttribute('y1', scaleY(s1.y));
+    line.setAttribute('x2', scaleX(s2.x)); line.setAttribute('y2', scaleY(s2.y));
+    line.setAttribute('stroke', '#ff9800'); line.setAttribute('stroke-width', '2');
+    line.setAttribute('opacity', '0.6');
+    svg.appendChild(line);
+  });
+
+  // 渲染站点
+  stations.forEach(s => {
+    const g = document.createElementNS(svgNS, 'g');
+    const invVal = interactiveState.inventory[s.id];
+    const ratio = invVal / s.cap;
+    const baseR = 8 + Math.sqrt(s.cap) / 3;
+
+    g.setAttribute('transform', `translate(${scaleX(s.x)}, ${scaleY(s.y)})`);
+
+    const ring = document.createElementNS(svgNS, 'circle');
+    ring.setAttribute('r', baseR + 4); ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', '#e0e0e0'); ring.setAttribute('stroke-width', '3');
+    svg.appendChild(ring);
+
+    const ringProgress = document.createElementNS(svgNS, 'circle');
+    ringProgress.setAttribute('r', baseR + 4); ringProgress.setAttribute('fill', 'none');
+    const ringColor = ratio < params.lowTarget ? '#f44336' : ratio > params.highTarget ? '#ff9800' : '#4caf50';
+    ringProgress.setAttribute('stroke', ringColor); ringProgress.setAttribute('stroke-width', '3');
+    const circumference = 2 * Math.PI * (baseR + 4);
+    ringProgress.setAttribute('stroke-dasharray', `${circumference * Math.min(ratio, 1)}, ${circumference}`);
+    ringProgress.setAttribute('stroke-dashoffset', circumference / 4);
+    ringProgress.setAttribute('transform', 'rotate(-90)');
+    svg.appendChild(ringProgress);
+
+    const circle = document.createElementNS(svgNS, 'circle');
+    circle.setAttribute('r', baseR);
+    circle.setAttribute('fill', getTypeCssColor(s.type));
+    circle.setAttribute('stroke', '#333'); circle.setAttribute('stroke-width', '1.5');
+    circle.style.cursor = 'pointer';
+    g.appendChild(circle);
+
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('y', -(baseR + 12));
+    label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-weight', 'bold');
+    label.textContent = s.id;
+    g.appendChild(label);
+
+    const invLabel = document.createElementNS(svgNS, 'text');
+    invLabel.setAttribute('y', 4); invLabel.setAttribute('text-anchor', 'middle');
+    invLabel.setAttribute('font-size', '11px'); invLabel.setAttribute('font-weight', 'bold');
+    invLabel.setAttribute('fill', 'white');
+    invLabel.textContent = invVal;
+    g.appendChild(invLabel);
+
+    const nameLabel = document.createElementNS(svgNS, 'text');
+    nameLabel.setAttribute('y', baseR + 18); nameLabel.setAttribute('text-anchor', 'middle');
+    nameLabel.setAttribute('font-size', '10px'); nameLabel.setAttribute('fill', '#666');
+    nameLabel.textContent = s.name;
+    g.appendChild(nameLabel);
+
+    // 交互按钮
+    const minusBtn = document.createElementNS(svgNS, 'g');
+    minusBtn.setAttribute('transform', `translate(${-baseR - 8}, ${baseR + 30})`);
+    minusBtn.style.cursor = 'pointer';
+    const minusCircle = document.createElementNS(svgNS, 'circle');
+    minusCircle.setAttribute('r', 8); minusCircle.setAttribute('fill', '#f44336');
+    minusBtn.appendChild(minusCircle);
+    const minusText = document.createElementNS(svgNS, 'text');
+    minusText.setAttribute('text-anchor', 'middle'); minusText.setAttribute('y', 4);
+    minusText.setAttribute('fill', 'white'); minusText.setAttribute('font-weight', 'bold');
+    minusText.setAttribute('font-size', '14px'); minusText.textContent = '-';
+    minusBtn.appendChild(minusText);
+    minusBtn.addEventListener('click', (e) => { e.stopPropagation(); interactiveAdjustInv(s.id, -1); });
+    g.appendChild(minusBtn);
+
+    const plusBtn = document.createElementNS(svgNS, 'g');
+    plusBtn.setAttribute('transform', `translate(${baseR + 8}, ${baseR + 30})`);
+    plusBtn.style.cursor = 'pointer';
+    const plusCircle = document.createElementNS(svgNS, 'circle');
+    plusCircle.setAttribute('r', 8); plusCircle.setAttribute('fill', '#4caf50');
+    plusBtn.appendChild(plusCircle);
+    const plusText = document.createElementNS(svgNS, 'text');
+    plusText.setAttribute('text-anchor', 'middle'); plusText.setAttribute('y', 4);
+    plusText.setAttribute('fill', 'white'); plusText.setAttribute('font-weight', 'bold');
+    plusText.setAttribute('font-size', '14px'); plusText.textContent = '+';
+    plusBtn.appendChild(plusText);
+    plusBtn.addEventListener('click', (e) => { e.stopPropagation(); interactiveAdjustInv(s.id, 1); });
+    g.appendChild(plusBtn);
+
+    g.addEventListener('click', () => showInteractiveStationDetail(s));
+    svg.appendChild(g);
+  });
+
+  // 调度中心
+  const dcG = document.createElementNS(svgNS, 'g');
+  dcG.setAttribute('transform', `translate(${scaleX(dc.x)}, ${scaleY(dc.y)})`);
+  const dcRect = document.createElementNS(svgNS, 'rect');
+  dcRect.setAttribute('x', -12); dcRect.setAttribute('y', -12);
+  dcRect.setAttribute('width', 24); dcRect.setAttribute('height', 24);
+  dcRect.setAttribute('rx', 4); dcRect.setAttribute('fill', '#ff3d00');
+  dcG.appendChild(dcRect);
+  const dcLabel2 = document.createElementNS(svgNS, 'text');
+  dcLabel2.setAttribute('y', -18); dcLabel2.setAttribute('text-anchor', 'middle');
+  dcLabel2.setAttribute('font-weight', 'bold'); dcLabel2.setAttribute('font-size', '11px');
+  dcLabel2.textContent = '调度中心';
+  dcG.appendChild(dcLabel2);
+  svg.appendChild(dcG);
+
+  container.appendChild(svg);
+}
+
+function renderStationList() {
+  const container = document.getElementById('interactiveStationList');
+  let html = '';
+  stations.forEach(s => {
+    const inv = interactiveState.inventory[s.id];
+    const ratio = inv / s.cap;
+    const fillClass = ratio < params.lowTarget ? 'low' : ratio > params.highTarget ? 'high' : 'safe';
+    const lowT = params.lowTarget * s.cap;
+    const highT = params.highTarget * s.cap;
+    html += `
+      <div class="station-row" id="row-${s.id}">
+        <span class="station-id">${s.id}</span>
+        <span class="station-name">${s.name}</span>
+        <span class="station-type">${s.type}</span>
+        <div class="inv-display">
+          <div class="inv-bar"><div class="inv-fill ${fillClass}" style="width:${Math.min(100,ratio*100)}%"></div></div>
+          <span class="inv-value" id="inv-${s.id}">${inv}</span>
+          <span class="inv-cap">/ ${s.cap}</span>
+        </div>
+        <div class="adjust-controls">
+          <button class="adjust-btn" onclick="interactiveAdjustInv('${s.id}', -1)" ${inv<=0?'disabled':''}>-</button>
+          <button class="adjust-btn" onclick="interactiveAdjustInv('${s.id}', -5)" ${inv<5?'disabled':''}>-5</button>
+          <input type="number" value="${inv}" min="0" max="${s.cap}" style="width:50px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center;font-weight:bold;" onchange="interactiveSetInv('${s.id}', parseInt(this.value))">
+          <button class="adjust-btn" onclick="interactiveAdjustInv('${s.id}', 5)" ${inv+5>s.cap?'disabled':''}>+5</button>
+          <button class="adjust-btn" onclick="interactiveAdjustInv('${s.id}', 1)" ${inv+1>s.cap?'disabled':''}>+</button>
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}
+
+function interactiveAdjustInv(id, delta) {
+  const s = getStation(id);
+  let newVal = interactiveState.inventory[id] + delta;
+  newVal = Math.max(0, Math.min(s.cap, newVal));
+  interactiveState.inventory[id] = newVal;
+  const diff = delta;
+  // 检查总守恒
+  const currentTotal = Object.values(interactiveState.inventory).reduce((a,b) => a+b, 0);
+  const originalTotal = stations.reduce((a,b) => a+b.init, 0);
+  if (currentTotal !== originalTotal) {
+    // 允许变化但记录
+  }
+  renderInteractiveMap();
+  renderStationList();
+  updateInteractiveStats();
+  interactiveShowResult();
+}
+
+function interactiveSetInv(id, value) {
+  const s = getStation(id);
+  value = Math.max(0, Math.min(s.cap, Math.round(value) || 0));
+  interactiveState.inventory[id] = value;
+  renderInteractiveMap();
+  renderStationList();
+  updateInteractiveStats();
+  interactiveShowResult();
+}
+
+function interactiveReset() {
+  stations.forEach(s => interactiveState.inventory[s.id] = s.init);
+  interactiveState.transfers = [];
+  interactiveState.lastResult = null;
+  renderInteractiveMap();
+  renderStationList();
+  updateInteractiveStats();
+  interactiveShowResult();
+}
+
+function interactiveAutoSched() {
+  const result = greedyScheduling(1);
+  stations.forEach(s => {
+    interactiveState.inventory[s.id] = Math.round(s.init + result.flow[s.id]);
+  });
+  interactiveState.transfers = [];
+  Object.entries(result.moves).forEach(([key, qty]) => {
+    const [from, to] = key.split('->');
+    interactiveState.transfers.push({from, to, qty});
+  });
+  renderInteractiveMap();
+  renderStationList();
+  updateInteractiveStats();
+  interactiveShowResult();
+}
+
+function updateInteractiveStats() {
+  const totalBikes = Object.values(interactiveState.inventory).reduce((a,b) => a+b, 0);
+  const originalTotal = stations.reduce((a,b) => a+b.init, 0);
+  let safeCount = 0, riskCount = 0;
+  stations.forEach(s => {
+    const ratio = interactiveState.inventory[s.id] / s.cap;
+    if (ratio >= params.lowTarget && ratio <= params.highTarget) safeCount++;
+    else riskCount++;
+  });
+  document.getElementById('interactiveStats').innerHTML = `
+    <div class="stat-card"><div class="value">${totalBikes}</div><div class="label">当前单车总数 ${totalBikes !== originalTotal ? '(已调整)' : ''}</div></div>
+    <div class="stat-card"><div class="value">${safeCount}/${stations.length}</div><div class="label">安全库存站点</div></div>
+    <div class="stat-card"><div class="value">${riskCount}</div><div class="label">偏离安全区间</div></div>
+    <div class="stat-card"><div class="value">${interactiveState.transfers.length}</div><div class="label">搬运记录数</div></div>
+  `;
+}
+
+function interactiveShowResult() {
+  const factor = parseFloat(document.getElementById('interactiveFactor').value) || 1;
+  const inv = {};
+  stations.forEach(s => inv[s.id] = [interactiveState.inventory[s.id]]);
+  demandData.forEach(period => {
+    stations.forEach(s => {
+      const d = period[s.id];
+      inv[s.id].push(inv[s.id][inv[s.id].length-1] + d.return * factor - d.borrow * factor);
+    });
+  });
+
+  let servedCount = 0;
+  let failedStations = [];
+  stations.forEach(s => {
+    const finalInv = inv[s.id][inv[s.id].length-1];
+    const lowT = params.lowTarget * s.cap;
+    const highT = params.highTarget * s.cap;
+    const meetsGoal = finalInv >= lowT && finalInv <= highT;
+    if (meetsGoal) servedCount++;
+    else failedStations.push({...s, finalInv, lowT, highT});
+  });
+
+  const rate = (servedCount / stations.length * 100).toFixed(0);
+  const panelClass = servedCount === stations.length ? '' : servedCount >= stations.length * 0.7 ? 'warn' : 'fail';
+
+  let html = `
+    <div class="result-panel ${panelClass}">
+      <h4>📊 模拟预测结果（需求系数 ${factor}x）</h4>
+      <div style="display:flex;align-items:center;gap:30px;flex-wrap:wrap;">
+        <div class="progress-ring">
+          <svg width="80" height="80">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="#e0e0e0" stroke-width="8"/>
+            <circle cx="40" cy="40" r="32" fill="none" 
+              stroke="${servedCount===stations.length?'#4caf50':servedCount>=stations.length*0.7?'#ff9800':'#f44336'}" 
+              stroke-width="8" 
+              stroke-dasharray="${2*Math.PI*32*rate/100}, ${2*Math.PI*32}"
+              stroke-dashoffset="${2*Math.PI*32/4}"
+              stroke-linecap="round"/>
+          </svg>
+          <div class="progress-ring-center">${rate}%</div>
+        </div>
+        <div>
+          <p><strong>达标站点：</strong>${servedCount} / ${stations.length}</p>
+          <p><strong>未达标：</strong>${failedStations.length} 个站点</p>
+          <p><strong>评价：</strong>${servedCount===stations.length?'🎉 全部达标！':servedCount>=stations.length*0.7?'⚠️ 部分达标':'❌ 多数站点未达标'}</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (failedStations.length > 0) {
+    html += `<div style="margin-top:15px;max-height:200px;overflow-y:auto;"><table>
+      <tr><th>站点</th><th>名称</th><th>09:30库存</th><th>安全区间</th><th>偏差</th></tr>`;
+    failedStations.forEach(s => {
+      const deviation = s.finalInv < s.lowT ? `缺 ${(s.lowT - s.finalInv).toFixed(1)}` : `余 ${(s.finalInv - s.highT).toFixed(1)}`;
+      const deviationColor = s.finalInv < s.lowT ? '#f44336' : '#ff9800';
+      html += `<tr>
+        <td>${s.id}</td><td>${s.name}</td>
+        <td style="color:${deviationColor};font-weight:bold">${s.finalInv.toFixed(1)}</td>
+        <td>[${s.lowT.toFixed(0)}, ${s.highT.toFixed(0)}]</td>
+        <td style="color:${deviationColor}">${deviation}</td>
+      </tr>`;
+    });
+    html += '</table></div>';
+  }
+
+  html += '<h4 style="margin-top:20px;">📈 各站点库存演化预测</h4>';
+  html += '<div style="overflow-x:auto;"><table><tr><th>站点</th>';
+  timeLabels.forEach(t => html += `<th>${t}</th>`);
+  html += '</tr>';
+  stations.forEach(s => {
+    html += `<tr><td><strong>${s.id}</strong></td>`;
+    inv[s.id].forEach((v, i) => {
+      const lowT = params.lowTarget * s.cap;
+      const highT = params.highTarget * s.cap;
+      let color = '#333';
+      if (v < lowT) color = '#f44336';
+      else if (v > highT) color = '#ff9800';
+      html += `<td style="color:${color};font-weight:bold">${Math.round(v)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</table></div>';
+
+  document.getElementById('interactiveResult').innerHTML = html;
+}
+
+function interactiveRunSim() {
+  interactiveShowResult();
+  document.getElementById('interactiveResult').scrollIntoView({behavior: 'smooth'});
+}
+
+function applyBatchInput() {
+  const input = document.getElementById('batchInput').value.trim();
+  if (!input) { alert('请输入数据！'); return; }
+  const values = input.split(/[,，\s]+/).map(v => parseInt(v.trim())).filter(v => !isNaN(v));
+  if (values.length !== stations.length) {
+    alert(`需要输入 ${stations.length} 个数值，当前只有 ${values.length} 个`);
+    return;
+  }
+  let total = 0;
+  stations.forEach((s, i) => {
+    const v = Math.max(0, Math.min(s.cap, values[i]));
+    interactiveState.inventory[s.id] = v;
+    total += v;
+  });
+  interactiveState.transfers = [];
+  renderInteractiveMap();
+  renderStationList();
+  updateInteractiveStats();
+  interactiveShowResult();
+  document.getElementById('batchInput').value = values.map((v,i) => interactiveState.inventory[stations[i].id]).join(',');
+}
+
+function showInteractiveStationDetail(s) {
+  const invVal = interactiveState.inventory[s.id];
+  const ratio = invVal / s.cap;
+  const factor = parseFloat(document.getElementById('interactiveFactor').value) || 1;
+  const invArr = [invVal];
+  demandData.forEach(period => {
+    const d = period[s.id];
+    invArr.push(invArr[invArr.length-1] + d.return * factor - d.borrow * factor);
+  });
+  const netFlow = computeNetFlow();
+  const lowT = params.lowTarget * s.cap;
+  const highT = params.highTarget * s.cap;
+  const meetsGoal = invArr[invArr.length-1] >= lowT && invArr[invArr.length-1] <= highT;
+
+  const detail = document.createElement('div');
+  detail.className = 'panel';
+  detail.style.position = 'fixed';
+  detail.style.top = '50%'; detail.style.left = '50%';
+  detail.style.transform = 'translate(-50%, -50%)';
+  detail.style.zIndex = '9999';
+  detail.style.maxWidth = '550px'; detail.style.width = '90%';
+  detail.style.maxHeight = '85vh'; detail.style.overflowY = 'auto';
+
+  let chartHtml = '<canvas id="detailChart" height="200"></canvas>';
+
+  detail.innerHTML = `
+    <h3>${s.id} - ${s.name} ${meetsGoal ? '<span class="badge ok">达标</span>' : '<span class="badge danger">未达标</span>'}</h3>
+    <div class="station-detail">
+      <p><strong>类型：</strong>${s.type} | <strong>坐标：</strong>(${s.x}, ${s.y}) km</p>
+      <p><strong>容量：</strong>${s.cap} 辆 | <strong>安全区间：</strong>[${lowT.toFixed(0)}, ${highT.toFixed(0)}]</p>
+      <div style="background:${ratio<params.lowTarget?'#ffebee':ratio>params.highTarget?'#fff3e0':'#e8f5e9'};padding:15px;border-radius:10px;margin:10px 0;text-align:center;">
+        <div style="font-size:36px;font-weight:bold;color:${ratio<params.lowTarget?'#f44336':ratio>params.highTarget?'#ff9800':'#4caf50'}">${Math.round(invVal)}</div>
+        <div style="color:#666">当前库存 (${(ratio*100).toFixed(1)}%)</div>
+      </div>
+      <div style="display:flex;gap:10px;margin:10px 0;">
+        <button onclick="interactiveAdjustInv('${s.id}', -10)" style="flex:1;padding:10px;background:#f44336;color:white;border:none;border-radius:6px;cursor:pointer;">-10</button>
+        <button onclick="interactiveAdjustInv('${s.id}', -1)" style="flex:1;padding:10px;background:#ff9800;color:white;border:none;border-radius:6px;cursor:pointer;">-1</button>
+        <button onclick="interactiveAdjustInv('${s.id}', 1)" style="flex:1;padding:10px;background:#4caf50;color:white;border:none;border-radius:6px;cursor:pointer;">+1</button>
+        <button onclick="interactiveAdjustInv('${s.id}', 10)" style="flex:1;padding:10px;background:#0083b0;color:white;border:none;border-radius:6px;cursor:pointer;">+10</button>
+      </div>
+      <hr style="margin:10px 0;">
+      <p><strong>早高峰借车总量：</strong>${netFlow[s.id].borrow} 辆</p>
+      <p><strong>早高峰还车总量：</strong>${netFlow[s.id].return} 辆</p>
+      <p><strong>早高峰净流量：</strong>${netFlow[s.id].net} 辆 ${netFlow[s.id].net < 0 ? '(流出)' : '(流入)'}</p>
+      <p><strong>09:30预测库存：</strong>${invArr[invArr.length-1].toFixed(1)} 辆</p>
+    </div>
+    <h4 style="margin:15px 0;">📉 库存演化预测</h4>
+    ${chartHtml}
+    <button onclick="this.closest('.panel').remove()" style="padding:10px 20px;background:#0083b0;color:white;border:none;border-radius:6px;cursor:pointer;margin-top:10px;width:100%;">关闭</button>
+  `;
+  document.body.appendChild(detail);
+
+  setTimeout(() => {
+    const ctx = document.getElementById('detailChart');
+    if (ctx) {
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: timeLabels,
+          datasets: [{
+            label: '库存预测',
+            data: invArr,
+            borderColor: '#0083b0',
+            backgroundColor: 'rgba(0,131,176,0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 5,
+            pointBackgroundColor: '#0083b0'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {legend: {display: false}},
+          scales: {
+            y: {beginAtZero: true, title: {display: true, text: '库存(辆)'}},
+            x: {title: {display: true, text: '时间'}}
+          }
+        }
+      });
+    }
+  }, 100);
+}
 </script>
 </body>
 </html>
