@@ -25,6 +25,21 @@ body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: linea
 .panel { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 .panel h2 { color: #0083b0; margin-bottom: 15px; font-size: 20px; border-left: 4px solid #00b4db; padding-left: 12px; }
 .panel h3 { color: #2a5298; margin: 15px 0 10px; font-size: 16px; }
+.panel-title-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.panel-title-row h2 { margin-bottom: 0; }
+.panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.panel-toggle-btn { padding: 7px 10px; border: 1px solid #d0d7de; border-radius: 999px; background: #f5f7fb; color: #2a5298; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+.panel-toggle-btn:hover { background: #eaf3ff; }
+.panel-toggle-btn.active { background: linear-gradient(90deg, #00b4db, #0083b0); color: white; border-color: #0083b0; }
+.map-tool-panel { margin-top: 12px; }
+.map-tool-section { display: none; }
+.map-tool-section.active { display: block; }
+.tool-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 10000; padding: 20px; }
+.tool-modal.active { display: flex; }
+.tool-modal-content { width: min(560px, 100%); max-height: 85vh; overflow-y: auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.25); }
+.tool-modal-content h3 { margin-bottom: 12px; color: #1f4d7a; }
+.tool-modal-close { float: right; border: none; background: none; font-size: 24px; color: #888; cursor: pointer; }
+.tool-modal-close:hover { color: #333; }
 
 .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; padding: 12px; background: #f8f9fa; border-radius: 10px; }
 .controls label { font-weight: 600; font-size: 13px; }
@@ -165,7 +180,13 @@ tr:hover { background: #f5f5f5; }
   <div class="main-layout">
     <div class="left-panel">
       <div class="panel">
-        <h2>🗺️ 互动调度地图</h2>
+        <div class="panel-title-row">
+          <h2>🗺️ 互动调度地图</h2>
+          <div class="panel-actions">
+            <button id="batchToolBtn" type="button" class="panel-toggle-btn active" onclick="openToolModal('batch')">📝 批量输入</button>
+            <button id="stationToolBtn" type="button" class="panel-toggle-btn" onclick="openToolModal('station')">📋 站点库存控制</button>
+          </div>
+        </div>
         <p style="color:#666; font-size:12px; margin-bottom:10px;">点击站点上的 <span style="color:#f44336; font-weight:bold;">-</span> 和 <span style="color:#4caf50; font-weight:bold;">+</span> 按钮调整库存，或点击站点查看详情</p>
         <div class="map-container" id="mainMap"></div>
         <div class="legend">
@@ -173,6 +194,19 @@ tr:hover { background: #f5f5f5; }
           <div class="legend-item"><div class="legend-color" style="background:#f44336"></div>缺车风险 (<20%)</div>
           <div class="legend-item"><div class="legend-color" style="background:#ff9800"></div>满桩风险 (>80%)</div>
           <div class="legend-item"><div class="legend-color" style="background:#00b4db"></div>调度中心</div>
+        </div>
+        <div class="map-tool-panel">
+          <div id="batchTool" class="map-tool-section">
+            <div class="batch-input-area">
+              <label>快速设置各站点库存（用逗号分隔，共14个值）：</label>
+              <input type="text" id="batchInput" placeholder="例如: 82,66,72,60,45,38,28,26,42,60,45,32,85,22">
+              <div class="btn-row">
+                <button onclick="applyBatch()" class="btn-primary">应用</button>
+                <button onclick="document.getElementById('batchInput').value=''" class="btn-warning">清空</button>
+              </div>
+            </div>
+          </div>
+          <div id="stationTool" class="map-tool-section"></div>
         </div>
       </div>
 
@@ -214,24 +248,14 @@ tr:hover { background: #f5f5f5; }
         <h3>📈 实时统计</h3>
         <div class="stats" id="statsArea"></div>
       </div>
-
-      <div class="panel">
-        <h3>📝 批量输入</h3>
-        <div class="batch-input-area">
-          <label>快速设置各站点库存（用逗号分隔，共14个值）：</label>
-          <input type="text" id="batchInput" placeholder="例如: 82,66,72,60,45,38,28,26,42,60,45,32,85,22">
-          <div class="btn-row">
-            <button onclick="applyBatch()" class="btn-primary">应用</button>
-            <button onclick="document.getElementById('batchInput').value=''" class="btn-warning">清空</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel" style="flex:1;">
-        <h3>📋 站点库存控制</h3>
-        <div class="station-list" id="stationList"></div>
-      </div>
     </div>
+  </div>
+</div>
+
+<div id="toolModal" class="tool-modal" onclick="if (event.target.id === 'toolModal') closeToolModal()">
+  <div class="tool-modal-content">
+    <button class="tool-modal-close" onclick="closeToolModal()">&times;</button>
+    <div id="toolModalBody"></div>
   </div>
 </div>
 
@@ -781,6 +805,7 @@ const dcRect = document.createElementNS(svgNS, 'rect');
 
 function renderStationList() {
   const container = document.getElementById('stationList');
+  if (!container) return;
   let html = '';
   stations.forEach(s => {
     const invVal = state.inventory[s.id];
@@ -1449,6 +1474,46 @@ function showStationDetail(s) {
       });
     }
   }, 100);
+}
+
+function openToolModal(tool) {
+  const modal = document.getElementById('toolModal');
+  const body = document.getElementById('toolModalBody');
+  if (!modal || !body) return;
+
+  const batchBtn = document.getElementById('batchToolBtn');
+  const stationBtn = document.getElementById('stationToolBtn');
+  if (batchBtn && stationBtn) {
+    batchBtn.classList.toggle('active', tool === 'batch');
+    stationBtn.classList.toggle('active', tool === 'station');
+  }
+
+  if (tool === 'batch') {
+    body.innerHTML = `
+      <h3>📝 批量输入</h3>
+      <div class="batch-input-area">
+        <label>快速设置各站点库存（用逗号分隔，共14个值）：</label>
+        <input type="text" id="batchInput" placeholder="例如: 82,66,72,60,45,38,28,26,42,60,45,32,85,22">
+        <div class="btn-row">
+          <button onclick="applyBatch(); closeToolModal()" class="btn-primary">应用</button>
+          <button onclick="document.getElementById('batchInput').value=''" class="btn-warning">清空</button>
+        </div>
+      </div>
+    `;
+  } else {
+    body.innerHTML = `
+      <h3>📋 站点库存控制</h3>
+      <div class="station-list" id="stationList"></div>
+    `;
+    renderStationList();
+  }
+
+  modal.classList.add('active');
+}
+
+function closeToolModal() {
+  const modal = document.getElementById('toolModal');
+  if (modal) modal.classList.remove('active');
 }
 
 document.getElementById('factorInput').addEventListener('change', () => {
