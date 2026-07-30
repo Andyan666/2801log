@@ -9,9 +9,12 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); min-height: 100vh; color: #333; }
 .container { max-width: 1500px; margin: 0 auto; padding: 20px; }
-.header { background: linear-gradient(90deg, #00b4db, #0083b0); color: white; padding: 20px 30px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center; }
+.header { position: relative; background: linear-gradient(90deg, #00b4db, #0083b0); color: white; padding: 20px 30px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center; }
 .header h1 { font-size: 24px; margin-bottom: 5px; }
 .header p { opacity: 0.9; font-size: 13px; }
+.header .rules-btn { position: absolute; top: 16px; right: 16px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.2); color: white; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; backdrop-filter: blur(4px); }
+.header .rules-btn:hover { background: rgba(255,255,255,0.3); }
+@media (max-width: 700px) { .header { padding-top: 56px; } .header .rules-btn { top: 14px; right: 14px; } }
 
 .main-layout { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
 @media (max-width: 1100px) { .main-layout { grid-template-columns: 1fr; } }
@@ -139,6 +142,7 @@ tr:hover { background: #f5f5f5; }
 <body>
 <div class="container">
   <div class="header">
+    <button type="button" class="rules-btn" onclick="showRulesModal()">查看规则</button>
     <h1>🚲 共享单车互动调度模拟器</h1>
     <p>手动调整各站点自行车数量，实时查看缺车/满桩状态，模拟早高峰调度效果</p>
   </div>
@@ -1468,11 +1472,35 @@ document.getElementById('highInput').addEventListener('change', () => {
 window.addEventListener('DOMContentLoaded', () => {
   initState();
   updateAll();
+  showRulesModal();
 });
 
 window.addEventListener('resize', () => {
   renderMap();
+  if (compareState.active) renderCompareMaps();
 });
+
+function showRulesModal() {
+  document.querySelectorAll('.station-detail-modal').forEach(modal => modal.remove());
+  const modal = document.createElement('div');
+  modal.className = 'station-detail-modal';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <button class="modal-close" onclick="this.closest('.station-detail-modal').remove()">&times;</button>
+      <h3>📘 使用规则说明</h3>
+      <ol style="color:#333; line-height:1.8; margin:16px 0; padding-left:20px;">
+        <li>欢迎使用共享单车互动调度模拟器，本模拟器由第18组制作。</li>
+        <li>点击“重置”，再点击“应用自动调度方案”，查看本组给出的方案及静态运输量。</li>
+        <li>手动调整各站点自行车数量，实时查看缺车/满桩状态，模拟早高峰调度效果。</li>
+        <li>调整完后点击“运行模拟预测”按钮，对手动调度后的结果进行预测。</li>
+        <li>点击“对比模式”，对比手动调度方案与本组提供的方案之间的区别。</li>
+        <li>重新加载页面即可重新模拟。</li>
+      </ol>
+      <button onclick="this.closest('.station-detail-modal').remove()" style="width:100%;padding:12px;background:linear-gradient(90deg,#00b4db,#0083b0);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">我知道了</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
 </script>
 </body>
 </html>
