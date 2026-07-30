@@ -183,11 +183,10 @@ tr:hover { background: #f5f5f5; }
         <div class="panel-title-row">
           <h2>🗺️ 互动调度地图</h2>
           <div class="panel-actions">
-            <button id="batchToolBtn" type="button" class="panel-toggle-btn active" onclick="openToolModal('batch')">📝 批量输入</button>
             <button id="stationToolBtn" type="button" class="panel-toggle-btn" onclick="openToolModal('station')">📋 站点库存控制</button>
           </div>
         </div>
-        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">批量输入</span>按钮或<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">站点库存控制</span>按钮，调整各站点共享单车初始库存，如不修改，则以图中所示为默认值</p>
+        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">站点库存控制</span>按钮，调整各站点共享单车初始库存，如不修改，则以图中所示为默认值</p>
         <p style="color:#666; font-size:12px; margin-bottom:10px;">点击站点上的 <span style="color:#f44336; font-weight:bold;">-</span> 和 <span style="color:#4caf50; font-weight:bold;">+</span> 按钮调度各站点共享单车数量，或点击站点查看详情</p>
         <div class="map-container" id="mainMap"></div>
         <div class="legend">
@@ -1467,17 +1466,7 @@ function openToolModal(tool) {
   }
 
   if (tool === 'batch') {
-    body.innerHTML = `
-      <h3>📝 批量输入</h3>
-      <div class="batch-input-area">
-        <label>快速设置各站点库存（用逗号分隔，共14个值）：</label>
-        <input type="text" id="batchInput" placeholder="例如: 82,66,72,60,45,38,28,26,42,60,45,32,85,22">
-        <div class="btn-row">
-          <button onclick="applyBatch(); closeToolModal()" class="btn-primary">应用</button>
-          <button onclick="document.getElementById('batchInput').value=''" class="btn-warning">清空</button>
-        </div>
-      </div>
-    `;
+    pass;
   } else {
     body.innerHTML = `
       <h3>📋 站点库存控制</h3>
