@@ -118,6 +118,22 @@ tr:hover { background: #f5f5f5; }
 .status-indicator.safe { background: #4caf50; }
 .status-indicator.low { background: #f44336; }
 .status-indicator.high { background: #ff9800; }
+
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+@media (max-width: 1100px) { .compare-grid { grid-template-columns: 1fr; } }
+.compare-card { background: #f7fbff; padding: 12px; border-radius: 14px; border: 1px solid #e0e7f1; }
+.compare-card h3 { margin-bottom: 12px; font-size: 16px; color: #1f4d7a; }
+.timeline-panel { margin: 10px 0 0; padding: 14px 10px 10px; border-radius: 14px; background: #f0f4f9; border: 1px solid #dbe3ee; }
+.timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #334e7c; font-weight: 600; }
+#timeSlider { width: 100%; accent-color: #0083b0; }
+.timeline-labels { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 12px; color: #555; margin-top: 8px; }
+.timeline-labels span { text-align: center; }
+.compare-summary { margin-top: 14px; padding: 14px; background: rgba(0, 132, 176, 0.08); border-radius: 12px; border: 1px solid rgba(0, 132, 176, 0.18); color: #1b3f66; }
+.compare-summary.show { display: block; }
+.compare-pulse { animation: pulse 1.2s infinite; }
+.flow-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: rgba(0, 148, 255, 0.9); box-shadow: 0 0 12px rgba(0,148,255,0.6); pointer-events: none; }
+@keyframes flowMove { 0% { transform: translate(0,0) scale(0.8); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; } }
+.flow-dot.animate { animation: flowMove 1.3s ease-out forwards; }
 </style>
 </head>
 <body>
@@ -131,6 +147,7 @@ tr:hover { background: #f5f5f5; }
     <button onclick="resetAll()" class="btn-warning">🔄 重置初始状态</button>
     <button onclick="applyAutoSched()" class="btn-success">⚡ 应用自动调度方案</button>
     <button onclick="runSimulation()" class="btn-primary">▶️ 运行模拟预测</button>
+    <button id="compareToggle" onclick="toggleCompareMode()" class="btn-primary">🧩 对比模式</button>
     <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
       <label>需求系数：</label>
       <input type="number" id="factorInput" value="1" min="0.5" max="1.5" step="0.1" style="width:70px;">
@@ -153,6 +170,31 @@ tr:hover { background: #f5f5f5; }
           <div class="legend-item"><div class="legend-color" style="background:#ff9800"></div>满桩风险 (>80%)</div>
           <div class="legend-item"><div class="legend-color" style="background:#00b4db"></div>调度中心</div>
         </div>
+      </div>
+
+      <div class="panel compare-panel" id="comparePanel" style="display:none;">
+        <h2>🔍 对比模式</h2>
+        <div class="compare-grid">
+          <div class="compare-card">
+            <h3>用户手动调节方案</h3>
+            <div class="map-container" id="manualMap"></div>
+          </div>
+          <div class="compare-card">
+            <h3>模型最优调度方案</h3>
+            <div class="map-container" id="optimalMap"></div>
+          </div>
+        </div>
+        <div class="timeline-panel">
+          <div class="timeline-header">
+            <span>时间:</span>
+            <strong id="currentTimeLabel">06:30</strong>
+          </div>
+          <input type="range" id="timeSlider" min="0" max="6" step="1" value="0" oninput="onTimelineChange(this.value)">
+          <div class="timeline-labels">
+            <span>06:30</span><span>07:00</span><span>07:30</span><span>08:00</span><span>08:30</span><span>09:00</span><span>09:30</span>
+          </div>
+        </div>
+        <div class="compare-summary" id="compareSummary"></div>
       </div>
 
       <div class="panel">
@@ -225,12 +267,353 @@ let state = {
   lastSimulation: null
 };
 
+const compareState = {
+  active: false,
+  timeIndex: 0,
+  manualTimeline: [],
+  optimalTimeline: [],
+  optimalResult: null,
+  flowEdges: []
+};
+
 function getParams() {
   return {
     lowTarget: parseFloat(document.getElementById('lowInput').value) || 0.2,
     highTarget: parseFloat(document.getElementById('highInput').value) || 0.8,
     factor: parseFloat(document.getElementById('factorInput').value) || 1
   };
+}
+
+function cloneInventory(inv) {
+  return Object.fromEntries(Object.entries(inv).map(([k,v]) => [k, v]));
+}
+
+function computeTimelineStates(baseInventory) {
+  const params = getParams();
+  const timeline = [cloneInventory(baseInventory)];
+  demandData.forEach(period => {
+    const previous = timeline[timeline.length - 1];
+    const next = cloneInventory(previous);
+    stations.forEach(s => {
+      const d = period[s.id];
+      next[s.id] = previous[s.id] + d.r * params.factor - d.b * params.factor;
+    });
+    timeline.push(next);
+  });
+  return timeline;
+}
+
+function applyFlowToInventory(baseInventory, flow) {
+  const next = cloneInventory(baseInventory);
+  Object.entries(flow || {}).forEach(([id, delta]) => {
+    next[id] = (next[id] || 0) + delta;
+  });
+  return next;
+}
+
+function getOptimalStartInventory(baseInventory) {
+  const result = minCostFlowScheduling();
+  const optimalInventory = applyFlowToInventory(baseInventory, result.flow);
+  compareState.optimalResult = result;
+  compareState.flowEdges = Object.entries(result.moves).map(([key, qty]) => {
+    const [from, to] = key.split('->');
+    return {from, to, qty};
+  });
+  return optimalInventory;
+}
+
+function getInventoryStatus(inv, cap) {
+  if (inv < 0) return { level: 'low', text: '严重缺车', color: '#d50000', anomaly: true };
+  if (inv > cap) return { level: 'high', text: '爆满', color: '#d84315', anomaly: true };
+  return getStatus(inv, cap);
+}
+
+function renderSvgMap(containerId, inventory, options = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const padding = 40;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  let svg = container.querySelector('svg');
+  if (svg) svg.remove();
+  svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  const scaleX = x => padding + (x / 5) * (width - 2 * padding);
+  const scaleY = y => height - padding - (y / 5) * (height - 2 * padding);
+  const positions = {};
+  for (let gx = 0; gx <= 5; gx++) {
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', scaleX(gx)); line.setAttribute('y1', scaleY(0));
+    line.setAttribute('x2', scaleX(gx)); line.setAttribute('y2', scaleY(5));
+    line.setAttribute('stroke', '#e8e8e8'); line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+  }
+  for (let gy = 0; gy <= 5; gy++) {
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', scaleX(0)); line.setAttribute('y1', scaleY(gy));
+    line.setAttribute('x2', scaleX(5)); line.setAttribute('y2', scaleY(gy));
+    line.setAttribute('stroke', '#e8e8e8'); line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+  }
+
+  stations.forEach(s => {
+    positions[s.id] = { x: scaleX(s.x), y: scaleY(s.y) };
+    const g = document.createElementNS(svgNS, 'g');
+    const invVal = inventory[s.id] ?? 0;
+    const ratio = invVal / s.cap;
+    const status = getInventoryStatus(invVal, s.cap);
+    const baseR = 8 + Math.sqrt(s.cap) / 3;
+    g.setAttribute('class', 'station');
+    g.setAttribute('transform', `translate(${positions[s.id].x}, ${positions[s.id].y})`);
+
+    const ring = document.createElementNS(svgNS, 'circle');
+    ring.setAttribute('r', baseR + 5);
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', '#e0e0e0');
+    ring.setAttribute('stroke-width', '3');
+    svg.appendChild(ring);
+
+    const ringProgress = document.createElementNS(svgNS, 'circle');
+    ringProgress.setAttribute('r', baseR + 5);
+    ringProgress.setAttribute('fill', 'none');
+    ringProgress.setAttribute('stroke', status.color);
+    ringProgress.setAttribute('stroke-width', '3');
+    const circumference = 2 * Math.PI * (baseR + 5);
+    ringProgress.setAttribute('stroke-dasharray', `${circumference * Math.min(Math.max(ratio, 0), 1)}, ${circumference}`);
+    ringProgress.setAttribute('stroke-dashoffset', circumference / 4);
+    ringProgress.setAttribute('transform', 'rotate(-90)');
+    ringProgress.style.transition = 'all 0.3s';
+    svg.appendChild(ringProgress);
+
+    const circle = document.createElementNS(svgNS, 'circle');
+    circle.setAttribute('r', baseR);
+    circle.setAttribute('fill', status.color);
+    circle.setAttribute('stroke', '#333');
+    circle.setAttribute('stroke-width', '1.5');
+    if (status.anomaly) circle.setAttribute('class', 'compare-pulse');
+    g.appendChild(circle);
+
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('y', -(baseR + 14));
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-weight', 'bold');
+    label.setAttribute('font-size', '11px');
+    label.textContent = s.id;
+    g.appendChild(label);
+
+    const invLabel = document.createElementNS(svgNS, 'text');
+    invLabel.setAttribute('y', 4);
+    invLabel.setAttribute('text-anchor', 'middle');
+    invLabel.setAttribute('font-size', '11px');
+    invLabel.setAttribute('font-weight', 'bold');
+    invLabel.setAttribute('fill', 'white');
+    invLabel.textContent = Math.round(invVal);
+    g.appendChild(invLabel);
+
+    const statusLabel = document.createElementNS(svgNS, 'text');
+    statusLabel.setAttribute('y', baseR + 18);
+    statusLabel.setAttribute('text-anchor', 'middle');
+    statusLabel.setAttribute('font-size', '9px');
+    statusLabel.setAttribute('font-weight', 'bold');
+    statusLabel.setAttribute('fill', status.color);
+    statusLabel.textContent = status.text;
+    g.appendChild(statusLabel);
+
+    if (status.anomaly) {
+      const warningIcon = document.createElementNS(svgNS, 'text');
+      warningIcon.setAttribute('y', baseR + 32);
+      warningIcon.setAttribute('text-anchor', 'middle');
+      warningIcon.setAttribute('font-size', '12px');
+      warningIcon.setAttribute('fill', status.color);
+      warningIcon.setAttribute('font-weight', 'bold');
+      warningIcon.textContent = '⚠';
+      g.appendChild(warningIcon);
+    }
+    svg.appendChild(g);
+  });
+
+  if (options.flowEdges?.length) {
+    options.flowEdges.forEach(edge => {
+      const from = positions[edge.from];
+      const to = positions[edge.to];
+      if (!from || !to) return;
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', from.x);
+      line.setAttribute('y1', from.y);
+      line.setAttribute('x2', to.x);
+      line.setAttribute('y2', to.y);
+      line.setAttribute('stroke', 'rgba(0, 132, 176, 0.4)');
+      line.setAttribute('stroke-width', Math.min(6, 1 + Math.log(1 + edge.qty)));
+      line.setAttribute('stroke-dasharray', '4 4');
+      svg.appendChild(line);
+    });
+  }
+
+  const dcG = document.createElementNS(svgNS, 'g');
+  dcG.setAttribute('transform', `translate(${scaleX(dc.x)}, ${scaleY(dc.y)})`);
+  const dcRect = document.createElementNS(svgNS, 'rect');
+  dcRect.setAttribute('x', -14);
+  dcRect.setAttribute('y', -14);
+  dcRect.setAttribute('width', 28);
+  dcRect.setAttribute('height', 28);
+  dcRect.setAttribute('rx', 4);
+  dcRect.setAttribute('fill', '#00b4db');
+  dcRect.setAttribute('stroke', '#333');
+  dcRect.setAttribute('stroke-width', '2');
+  dcG.appendChild(dcRect);
+  const dcLabel = document.createElementNS(svgNS, 'text');
+  dcLabel.setAttribute('y', -22);
+  dcLabel.setAttribute('text-anchor', 'middle');
+  dcLabel.setAttribute('font-weight', 'bold');
+  dcLabel.setAttribute('font-size', '11px');
+  dcLabel.setAttribute('fill', '#00b4db');
+  dcLabel.textContent = '调度中心';
+  dcG.appendChild(dcLabel);
+  svg.appendChild(dcG);
+
+  container.appendChild(svg);
+
+  if (options.flowEdges?.length) {
+    animateFlowDots(container, options.flowEdges, positions);
+  }
+}
+
+function animateFlowDots(container, edges, positions) {
+  const dots = [];
+  edges.slice(0, 6).forEach(edge => {
+    const from = positions[edge.from];
+    const to = positions[edge.to];
+    if (!from || !to) return;
+    const count = Math.min(3, Math.ceil(edge.qty / 6));
+    for (let i = 0; i < count; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'flow-dot animate';
+      dot.style.left = `${from.x}px`;
+      dot.style.top = `${from.y}px`;
+      dot.style.setProperty('--dx', `${to.x - from.x}px`);
+      dot.style.setProperty('--dy', `${to.y - from.y}px`);
+      dot.style.animationDelay = `${i * 120}ms`;
+      container.appendChild(dot);
+      dots.push(dot);
+    }
+  });
+  setTimeout(() => dots.forEach(dot => dot.remove()), 1400);
+}
+
+function renderCompareMaps() {
+  if (!compareState.active) return;
+  const manualInv = compareState.manualTimeline[compareState.timeIndex];
+  const optimalInv = compareState.optimalTimeline[compareState.timeIndex];
+  renderSvgMap('manualMap', manualInv, { flowEdges: [] });
+  renderSvgMap('optimalMap', optimalInv, { flowEdges: compareState.flowEdges });
+  document.getElementById('currentTimeLabel').textContent = timeLabels[compareState.timeIndex];
+  renderCompareSummary(compareState.timeIndex);
+}
+
+function renderCompareSummary(timeIndex) {
+  const summaryWrap = document.getElementById('compareSummary');
+  if (!summaryWrap) return;
+  const manualInv = compareState.manualTimeline[timeIndex];
+  const optimalInv = compareState.optimalTimeline[timeIndex];
+  let manualLow = 0, manualHigh = 0, optimalLow = 0, optimalHigh = 0;
+  stations.forEach(s => {
+    const mv = manualInv[s.id];
+    const ov = optimalInv[s.id];
+    if (mv < 0) manualLow++;
+    if (mv > s.cap) manualHigh++;
+    if (ov < 0) optimalLow++;
+    if (ov > s.cap) optimalHigh++;
+  });
+  const timeText = timeLabels[timeIndex];
+  let summary = `<strong>${timeText} 对比概览</strong><br>`;
+  summary += `手动方案：缺车 ${manualLow} 站、爆满 ${manualHigh} 站；模型方案：缺车 ${optimalLow} 站、爆满 ${optimalHigh} 站。`;
+  if (timeIndex === timeLabels.length - 1) {
+    const diffLow = manualLow - optimalLow;
+    const diffHigh = manualHigh - optimalHigh;
+    summary += `<br><strong>最终 09:30 结果：</strong>模型方案比手动方案减少 ${Math.max(0, diffLow)} 个缺车站、${Math.max(0, diffHigh)} 个爆满站，整体性能更稳。`;
+  }
+  summaryWrap.innerHTML = summary;
+  summaryWrap.classList.add('show');
+}
+
+function toggleCompareMode() {
+  compareState.active = !compareState.active;
+  const panel = document.getElementById('comparePanel');
+  const button = document.getElementById('compareToggle');
+  if (compareState.active) {
+    compareState.timeIndex = 0;
+    compareState.manualTimeline = computeTimelineStates(state.inventory);
+    const optimalStart = getOptimalStartInventory(state.inventory);
+    compareState.optimalTimeline = computeTimelineStates(optimalStart);
+    panel.style.display = 'block';
+    button.textContent = '✖ 关闭对比模式';
+    renderCompareMaps();
+  } else {
+    panel.style.display = 'none';
+    button.textContent = '🧩 对比模式';
+  }
+}
+
+function onTimelineChange(value) {
+  compareState.timeIndex = Number(value);
+  renderCompareMaps();
+  if (compareState.timeIndex === timeLabels.length - 1) {
+    showComparisonResultModal();
+  }
+}
+
+function updateCompareView() {
+  if (compareState.active) {
+    compareState.manualTimeline = computeTimelineStates(state.inventory);
+    const optimalStart = applyFlowToInventory(state.inventory, compareState.optimalResult?.flow || {});
+    compareState.optimalTimeline = computeTimelineStates(optimalStart);
+    renderCompareMaps();
+  }
+}
+
+function showComparisonResultModal() {
+  const manualInv = compareState.manualTimeline[timeLabels.length - 1];
+  const optimalInv = compareState.optimalTimeline[timeLabels.length - 1];
+  let manualLow = 0, manualHigh = 0, optimalLow = 0, optimalHigh = 0;
+  stations.forEach(s => {
+    const mv = manualInv[s.id];
+    const ov = optimalInv[s.id];
+    if (mv < 0) manualLow++;
+    if (mv > s.cap) manualHigh++;
+    if (ov < 0) optimalLow++;
+    if (ov > s.cap) optimalHigh++;
+  });
+  const modal = document.createElement('div');
+  modal.className = 'station-detail-modal';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <button class="modal-close" onclick="this.closest('.station-detail-modal').remove()">&times;</button>
+      <h3>📌 09:30 最终结果评估</h3>
+      <p>经过 3 小时的运行，系统展示用户手动方案与模型最优方案的最终库存表现。</p>
+      <div style="display:grid; gap:12px; margin:18px 0;">
+        <div style="background:#f7fbff;padding:14px;border-radius:12px;border:1px solid #dbe3ee;">
+          <h4>手动方案</h4>
+          <p>缺车站点：<strong>${manualLow}</strong></p>
+          <p>爆满站点：<strong>${manualHigh}</strong></p>
+        </div>
+        <div style="background:#f7fbff;padding:14px;border-radius:12px;border:1px solid #dbe3ee;">
+          <h4>模型方案</h4>
+          <p>缺车站点：<strong>${optimalLow}</strong></p>
+          <p>爆满站点：<strong>${optimalHigh}</strong></p>
+        </div>
+        <div style="background:#e8f5e9;padding:14px;border-radius:12px;border:1px solid #c8e6c9;">
+          <h4>稳定性提升</h4>
+          <p>缺车减少：<strong>${Math.max(0, manualLow - optimalLow)}</strong> 站</p>
+          <p>爆满减少：<strong>${Math.max(0, manualHigh - optimalHigh)}</strong> 站</p>
+        </div>
+      </div>
+      <button onclick="this.closest('.station-detail-modal').remove()" style="width:100%;padding:12px;background:linear-gradient(90deg,#00b4db,#0083b0);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">关闭</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
 }
 
 function getStation(id) { return stations.find(s => s.id === id); }
@@ -481,6 +864,7 @@ function updateAll() {
   renderMap();
   renderStationList();
   renderStats();
+  updateCompareView();
 }
 
 function resetAll() {
