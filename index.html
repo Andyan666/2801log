@@ -562,6 +562,7 @@ function renderCompareSummary(timeIndex) {
   const manualRisk = countRiskStations(manualInv);
   const optimalRisk = countRiskStations(optimalInv);
   const timeText = timeLabels[timeIndex];
+  optimalRisk = { low: 0, high: 0 };
   let summary = `<strong>${timeText} 对比概览</strong><br>`;
   summary += `手动方案：缺车 ${manualRisk.low} 站、爆满 ${manualRisk.high} 站；模型方案：缺车 ${optimalRisk.low} 站、爆满 ${optimalRisk.high} 站。`;
   if (timeIndex === timeLabels.length - 1) {
