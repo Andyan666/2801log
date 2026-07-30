@@ -187,7 +187,8 @@ tr:hover { background: #f5f5f5; }
             <button id="stationToolBtn" type="button" class="panel-toggle-btn" onclick="openToolModal('station')">📋 站点库存控制</button>
           </div>
         </div>
-        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击站点上的 <span style="color:#f44336; font-weight:bold;">-</span> 和 <span style="color:#4caf50; font-weight:bold;">+</span> 按钮调整库存，或点击站点查看详情</p>
+        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">批量输入</span>按钮或<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">站点库存控制</span>按钮，调整各站点共享单车初始库存，如不修改，则以图中所示为默认值</p>
+        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击站点上的 <span style="color:#f44336; font-weight:bold;">-</span> 和 <span style="color:#4caf50; font-weight:bold;">+</span> 按钮调度各站点共享单车数量，或点击站点查看详情</p>
         <div class="map-container" id="mainMap"></div>
         <div class="legend">
           <div class="legend-item"><div class="legend-color" style="background:#4caf50"></div>安全区间 (20%-80%)</div>
@@ -238,7 +239,7 @@ tr:hover { background: #f5f5f5; }
       <div class="panel">
         <h2>📊 模拟预测结果</h2>
         <div id="resultArea">
-          <p style="color:#666; text-align:center; padding:30px;">调整库存后点击"运行模拟预测"查看结果</p>
+          <p style="color:#666; text-align:center; padding:30px;">调度后点击"运行模拟预测"查看结果</p>
         </div>
       </div>
     </div>
