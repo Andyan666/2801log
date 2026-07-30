@@ -164,7 +164,7 @@ tr:hover { background: #f5f5f5; }
 
   <div class="controls">
     <button onclick="resetAll()" class="btn-warning">🔄 重置初始状态</button>
-    <button onclick="applyAutoSched()" class="btn-success">⚡ 应用自动调度方案</button>
+    <button onclick="applyAutoSched()" class="btn-success">📏 计算手动调度后的静态运输量</button>
     <button onclick="runSimulation()" class="btn-primary">▶️ 运行模拟预测</button>
     <button id="compareToggle" onclick="toggleCompareMode()" class="btn-primary">🧩 对比模式</button>
     <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
@@ -1120,6 +1120,7 @@ function minCostFlowScheduling() {
   const targetStartInventory = buildFeasibleOptimalStart(state.inventory);
   const moves = {};
   const flow = {};
+  let totalCost = 0;
   stations.forEach(s => flow[s.id] = 0);
 
   const sources = stations
@@ -1140,6 +1141,7 @@ function minCostFlowScheduling() {
       if (moveQty <= 0) continue;
       const key = `${src.id}->${tgt.id}`;
       moves[key] = (moves[key] || 0) + moveQty;
+      totalCost += moveQty * dist(src, tgt);
       flow[src.id] -= moveQty;
       flow[tgt.id] += moveQty;
       src.available -= moveQty;
@@ -1147,7 +1149,7 @@ function minCostFlowScheduling() {
     }
   }
 
-  return {moves, flow, startInventory: cloneInventory(targetStartInventory), totalCost: 0};
+  return {moves, flow, startInventory: cloneInventory(targetStartInventory), totalCost};
 }
 
 function showSchedulingAnimation(moves, totalCost) {
@@ -1200,21 +1202,8 @@ function showSchedulingAnimation(moves, totalCost) {
 function applyAutoSched() {
   const result = minCostFlowScheduling();
 
-  // 显示调度动画
+  // 仅计算当前手动配置下的静态运输量，不修改库存
   showSchedulingAnimation(result.moves, result.totalCost);
-
-  // 应用调度结果，优先使用可行起始库存
-  if (result.startInventory) {
-    stations.forEach(s => {
-      state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(result.startInventory[s.id] || 0)));
-    });
-  } else {
-    stations.forEach(s => {
-      state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(state.inventory[s.id] + (result.flow[s.id] || 0))));
-    });
-  }
-
-  updateAll();
   runSimulation();
 }
 
@@ -1531,7 +1520,7 @@ function showRulesModal() {
       <h3>📘 使用规则说明</h3>
       <ol style="color:#333; line-height:1.8; margin:16px 0; padding-left:20px;">
         <li>欢迎使用共享单车互动调度模拟器，本模拟器由第18组制作。</li>
-        <li>点击“重置”，再点击“应用自动调度方案”，查看本组给出的方案及静态运输量。</li>
+        <li>点击“重置”，再点击“计算手动调度后的静态运输量”，查看本组给出的方案及静态运输量。</li>
         <li>手动调整各站点自行车数量，实时查看缺车/满桩状态，模拟早高峰调度效果。</li>
         <li>调整完后点击“运行模拟预测”按钮，对手动调度后的结果进行预测。</li>
         <li>点击“对比模式”，对比手动调度方案与本组提供的方案之间的区别。</li>
