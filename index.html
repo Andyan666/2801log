@@ -517,26 +517,31 @@ function renderCompareMaps() {
   renderCompareSummary(compareState.timeIndex);
 }
 
+function countRiskStations(inventory) {
+  const params = getParams();
+  let low = 0;
+  let high = 0;
+  stations.forEach(s => {
+    const status = getStatus(inventory[s.id], s.cap);
+    if (status.level === 'low') low++;
+    else if (status.level === 'high') high++;
+  });
+  return { low, high };
+}
+
 function renderCompareSummary(timeIndex) {
   const summaryWrap = document.getElementById('compareSummary');
   if (!summaryWrap) return;
   const manualInv = compareState.manualTimeline[timeIndex];
   const optimalInv = compareState.optimalTimeline[timeIndex];
-  let manualLow = 0, manualHigh = 0, optimalLow = 0, optimalHigh = 0;
-  stations.forEach(s => {
-    const mv = manualInv[s.id];
-    const ov = optimalInv[s.id];
-    if (mv < 0) manualLow++;
-    if (mv > s.cap) manualHigh++;
-    if (ov < 0) optimalLow++;
-    if (ov > s.cap) optimalHigh++;
-  });
+  const manualRisk = countRiskStations(manualInv);
+  const optimalRisk = countRiskStations(optimalInv);
   const timeText = timeLabels[timeIndex];
   let summary = `<strong>${timeText} 对比概览</strong><br>`;
-  summary += `手动方案：缺车 ${manualLow} 站、爆满 ${manualHigh} 站；模型方案：缺车 ${optimalLow} 站、爆满 ${optimalHigh} 站。`;
+  summary += `手动方案：缺车 ${manualRisk.low} 站、爆满 ${manualRisk.high} 站；模型方案：缺车 ${optimalRisk.low} 站、爆满 ${optimalRisk.high} 站。`;
   if (timeIndex === timeLabels.length - 1) {
-    const diffLow = manualLow - optimalLow;
-    const diffHigh = manualHigh - optimalHigh;
+    const diffLow = manualRisk.low - optimalRisk.low;
+    const diffHigh = manualRisk.high - optimalRisk.high;
     summary += `<br><strong>最终 09:30 结果：</strong>模型方案比手动方案减少 ${Math.max(0, diffLow)} 个缺车站、${Math.max(0, diffHigh)} 个爆满站，整体性能更稳。`;
   }
   summaryWrap.innerHTML = summary;
@@ -581,15 +586,8 @@ function updateCompareView() {
 function showComparisonResultModal() {
   const manualInv = compareState.manualTimeline[timeLabels.length - 1];
   const optimalInv = compareState.optimalTimeline[timeLabels.length - 1];
-  let manualLow = 0, manualHigh = 0, optimalLow = 0, optimalHigh = 0;
-  stations.forEach(s => {
-    const mv = manualInv[s.id];
-    const ov = optimalInv[s.id];
-    if (mv < 0) manualLow++;
-    if (mv > s.cap) manualHigh++;
-    if (ov < 0) optimalLow++;
-    if (ov > s.cap) optimalHigh++;
-  });
+  const manualRisk = countRiskStations(manualInv);
+  const optimalRisk = countRiskStations(optimalInv);
   const modal = document.createElement('div');
   modal.className = 'station-detail-modal';
   modal.innerHTML = `
@@ -600,18 +598,18 @@ function showComparisonResultModal() {
       <div style="display:grid; gap:12px; margin:18px 0;">
         <div style="background:#f7fbff;padding:14px;border-radius:12px;border:1px solid #dbe3ee;">
           <h4>手动方案</h4>
-          <p>缺车站点：<strong>${manualLow}</strong></p>
-          <p>爆满站点：<strong>${manualHigh}</strong></p>
+          <p>缺车站点：<strong>${manualRisk.low}</strong></p>
+          <p>爆满站点：<strong>${manualRisk.high}</strong></p>
         </div>
         <div style="background:#f7fbff;padding:14px;border-radius:12px;border:1px solid #dbe3ee;">
           <h4>模型方案</h4>
-          <p>缺车站点：<strong>${optimalLow}</strong></p>
-          <p>爆满站点：<strong>${optimalHigh}</strong></p>
+          <p>缺车站点：<strong>${optimalRisk.low}</strong></p>
+          <p>爆满站点：<strong>${optimalRisk.high}</strong></p>
         </div>
         <div style="background:#e8f5e9;padding:14px;border-radius:12px;border:1px solid #c8e6c9;">
           <h4>稳定性提升</h4>
-          <p>缺车减少：<strong>${Math.max(0, manualLow - optimalLow)}</strong> 站</p>
-          <p>爆满减少：<strong>${Math.max(0, manualHigh - optimalHigh)}</strong> 站</p>
+          <p>缺车减少：<strong>${Math.max(0, manualRisk.low - optimalRisk.low)}</strong> 站</p>
+          <p>爆满减少：<strong>${Math.max(0, manualRisk.high - optimalRisk.high)}</strong> 站</p>
         </div>
       </div>
       <button onclick="this.closest('.station-detail-modal').remove()" style="width:100%;padding:12px;background:linear-gradient(90deg,#00b4db,#0083b0);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">关闭</button>
