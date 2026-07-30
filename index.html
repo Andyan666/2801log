@@ -616,10 +616,204 @@ function computeFinalInv(flow) {
   return inv;
 }
 
-function applyAutoSched() {
-  const result = greedyScheduling();
+function minCostFlowScheduling() {
+  const params = getParams();
+  
+  // 1. 计算无调度下的 09:30 库存
+  const finalInv = {};
   stations.forEach(s => {
-    state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(state.inventory[s.id] + result.flow[s.id])));
+    let curInv = state.inventory[s.id];
+    demandData.forEach(period => {
+      const d = period[s.id];
+      curInv += d.r * params.factor - d.b * params.factor;
+    });
+    finalInv[s.id] = curInv;
+  });
+
+  // 2. 构建供给/需求节点
+  // 供给：溢出站（库存 > 80%容量）
+  // 需求：有剩余容量的站（库存 < 80%容量）
+  const supply = {}; // 站点 -> 可调出量
+  const demand = {}; // 站点 -> 可调入量（剩余容量）
+  
+  stations.forEach(s => {
+    const inv = finalInv[s.id];
+    const cap = s.cap;
+    const highT = params.highTarget * cap;
+    
+    if (inv > highT) {
+      supply[s.id] = inv - highT; // 溢出量
+    } else if (inv < highT) {
+      demand[s.id] = highT - inv; // 剩余容量
+    }
+  });
+
+  const supplyNodes = Object.keys(supply);
+  const demandNodes = Object.keys(demand);
+  
+  if (supplyNodes.length === 0 || demandNodes.length === 0) {
+    return {moves: {}, flow: {}, totalCost: 0};
+  }
+
+  // 3. 最小费用流：成功最短增广路算法
+  const nS = supplyNodes.length;
+  const nD = demandNodes.length;
+  const N = nS + nD + 2;
+  const SRC = nS + nD;
+  const SNK = nS + nD + 1;
+
+  const adj = Array.from({length: N}, () => []);
+  
+  function addEdge(u, v, cap, cost) {
+    adj[u].push([v, cap, cost, adj[v].length]);
+    adj[v].push([u, 0, -cost, adj[u].length - 1]);
+  }
+
+  // 源点到供给节点
+  supplyNodes.forEach((s, i) => addEdge(SRC, i, supply[s], 0));
+  // 需求节点到汇点
+  demandNodes.forEach((d, j) => addEdge(nS + j, SNK, demand[d], 0));
+  // 供给到需求
+  supplyNodes.forEach((s, i) => {
+    demandNodes.forEach((d, j) => {
+      const sInfo = getStation(s);
+      const dInfo = getStation(d);
+      addEdge(i, nS + j, 18, dist(sInfo, dInfo)); // 单车容量上限18
+    });
+  });
+
+  // SPFA 最短增广路
+  let totalFlow = 0;
+  let totalCost = 0;
+  const maxFlow = Object.values(supply).reduce((a, b) => a + b, 0);
+
+  while (totalFlow < maxFlow) {
+    const distArr = Array(N).fill(Infinity);
+    const inQueue = Array(N).fill(false);
+    const prevV = Array(N).fill(-1);
+    const prevE = Array(N).fill(-1);
+    
+    distArr[SRC] = 0;
+    const q = [SRC];
+    inQueue[SRC] = true;
+    
+    while (q.length > 0) {
+      const u = q.shift();
+      inQueue[u] = false;
+      
+      for (let ei = 0; ei < adj[u].length; ei++) {
+        const [v, cap, cost, rev] = adj[u][ei];
+        if (cap > 0 && distArr[v] > distArr[u] + cost) {
+          distArr[v] = distArr[u] + cost;
+          prevV[v] = u;
+          prevE[v] = ei;
+          if (!inQueue[v]) {
+            q.push(v);
+            inQueue[v] = true;
+          }
+        }
+      }
+    }
+    
+    if (distArr[SNK] === Infinity) break;
+    
+    // 增广
+    let f = Infinity;
+    for (let v = SNK; v !== SRC; v = prevV[v]) {
+      const u = prevV[v];
+      const ei = prevE[v];
+      f = Math.min(f, adj[u][ei][1]);
+    }
+    
+    for (let v = SNK; v !== SRC; v = prevV[v]) {
+      const u = prevV[v];
+      const ei = prevE[v];
+      adj[u][ei][1] -= f;
+      const rev = adj[u][ei][3];
+      adj[v][rev][1] += f;
+      totalCost += f * adj[u][ei][2];
+    }
+    totalFlow += f;
+  }
+
+  // 4. 提取搬运方案
+  const moves = {};
+  const flow = {};
+  stations.forEach(s => flow[s.id] = 0);
+  
+  supplyNodes.forEach((s, i) => {
+    for (const [v, cap, cost, rev] of adj[i]) {
+      if (v >= nS && v < nS + nD) {
+        const d = demandNodes[v - nS];
+        const used = adj[v][rev][1]; // 反向边容量 = 已用流量
+        if (used > 0) {
+          moves[`${s}->${d}`] = used;
+          flow[s] = (flow[s] || 0) - used;
+          flow[d] = (flow[d] || 0) + used;
+        }
+      }
+    }
+  });
+
+  return {moves, flow, totalCost: totalCost.toFixed(2)};
+}
+
+function showSchedulingAnimation(moves, totalCost) {
+  // 创建动画覆盖层
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); z-index: 10000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: white; font-family: 'Microsoft YaHei', sans-serif;
+  `;
+  
+  const movesList = Object.entries(moves).map(([k, v]) => `${k}: ${v}辆`).join('\n');
+  overlay.innerHTML = `
+    <div style="text-align: center; max-width: 500px; padding: 30px;">
+      <h2 style="color: #00b4db; margin-bottom: 10px;">🚚 调度方案动画演示</h2>
+      <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; margin: 20px 0; font-size: 14px; line-height: 1.8; white-space: pre-wrap;">${movesList}</div>
+      <div style="font-size: 24px; font-weight: bold; color: #4caf50; margin: 20px 0;">
+        总静态运输量: <span id="animCost">0.00</span> 车·km
+      </div>
+      <button id="skipAnim" style="padding: 12px 30px; background: linear-gradient(90deg, #00b4db, #0083b0); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;">跳过动画</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  
+  // 数字滚动动画
+  const costEl = document.getElementById('animCost');
+  let current = 0;
+  const target = totalCost;
+  const duration = 1500;
+  const startTime = Date.now();
+  
+  function animate() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    costEl.textContent = (target * eased).toFixed(2);
+    if (progress < 1) requestAnimationFrame(animate);
+  }
+  animate();
+  
+  // 点击跳过
+  document.getElementById('skipAnim').onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  
+  // 3秒后自动关闭
+  setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 4000);
+}
+
+function applyAutoSched() {
+  const result = minCostFlowScheduling();
+  
+  // 显示调度动画
+  showSchedulingAnimation(result.moves, result.totalCost);
+  
+  // 应用调度结果
+  stations.forEach(s => {
+    state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(state.inventory[s.id] + (result.flow[s.id] || 0))));
   });
   updateAll();
   runSimulation();
