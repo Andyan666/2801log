@@ -764,7 +764,7 @@ function renderMap() {
   dcG.setAttribute('transform', `translate(${scaleX(dc.x)}, ${scaleY(dc.y)})`);
 const dcRect = document.createElementNS(svgNS, 'rect');
     dcRect.setAttribute('x', -14); dcRect.setAttribute('y', -14);
-    dcRect.setAttribute('width', 28); dcRect.setAttribute('height', 28);
+    dcRect.setAttribute('width', 14); dcRect.setAttribute('height', 14);
     dcRect.setAttribute('rx', 4); dcRect.setAttribute('fill', '#00b4db');
     dcRect.setAttribute('stroke', '#333'); dcRect.setAttribute('stroke-width', '2');
     dcG.appendChild(dcRect);
