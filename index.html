@@ -152,9 +152,29 @@ tr:hover { background: #f5f5f5; }
 .flow-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: rgba(0, 148, 255, 0.9); box-shadow: 0 0 12px rgba(0,148,255,0.6); pointer-events: none; }
 @keyframes flowMove { 0% { transform: translate(0,0) scale(0.8); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; } }
 .flow-dot.animate { animation: flowMove 1.3s ease-out forwards; }
+.access-overlay { position: fixed; inset: 0; z-index: 20000; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(135deg, #0f172a, #1e3a8a 60%, #2563eb); color: white; }
+.access-card { width: min(420px, 100%); background: rgba(255,255,255,0.12); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.28); text-align: center; }
+.access-card h2 { margin-bottom: 10px; font-size: 24px; }
+.access-card p { line-height: 1.7; opacity: 0.95; margin-bottom: 14px; font-size: 14px; }
+.access-card input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.95); color: #0f172a; font-size: 15px; margin-top: 8px; }
+.access-card button { width: 100%; margin-top: 12px; padding: 12px 14px; border: none; border-radius: 10px; background: linear-gradient(90deg, #f59e0b, #ef4444); color: white; font-weight: 700; cursor: pointer; }
+.access-card .countdown { font-size: 20px; font-weight: 700; color: #fde68a; margin: 14px 0 8px; }
+.access-card .hint { font-size: 12px; opacity: 0.85; margin-top: 10px; }
 </style>
 </head>
 <body>
+<div id="accessOverlay" class="access-overlay">
+  <div class="access-card">
+    <h2>🔒 页面访问受限</h2>
+    <p>本页面将在 2026 年 7 月 31 日 06:00 后开放自由访问。</p>
+    <div id="accessCountdown" class="countdown">正在计算倒计时…</div>
+    <form id="accessForm">
+      <input id="accessPassword" type="password" placeholder="请输入密码" autocomplete="off">
+      <button type="submit">立即登录</button>
+    </form>
+    <div id="accessMessage" class="hint">请输入密码后继续访问。</div>
+  </div>
+</div>
 <div class="container">
   <div class="header">
     <button type="button" class="rules-btn" onclick="showRulesModal()">查看规则</button>
@@ -164,7 +184,6 @@ tr:hover { background: #f5f5f5; }
 
   <div class="controls">
     <button onclick="resetAll()" class="btn-warning">🔄 重置初始状态</button>
-    <button onclick="applyAutoSched()" class="btn-success">📏 计算手动调度后的静态运输量</button>
     <button onclick="runSimulation()" class="btn-primary">▶️ 运行模拟预测</button>
     <button id="compareToggle" onclick="toggleCompareMode()" class="btn-primary">🧩 对比模式</button>
     <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
@@ -1499,7 +1518,55 @@ document.getElementById('highInput').addEventListener('change', () => {
   if (state.lastSimulation) runSimulation();
 });
 
+let accessUnlocked = false;
+const accessUnlockTime = new Date(2026, 6, 31, 6, 0, 0);
+
+function updateAccessGate() {
+  const overlay = document.getElementById('accessOverlay');
+  const countdownEl = document.getElementById('accessCountdown');
+  if (!overlay || !countdownEl) return;
+  if (accessUnlocked || new Date() >= accessUnlockTime) {
+    overlay.style.display = 'none';
+    return;
+  }
+  const diff = accessUnlockTime - new Date();
+  const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+  const hours = Math.max(0, Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+  const minutes = Math.max(0, Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)));
+  const seconds = Math.max(0, Math.floor((diff % (1000 * 60)) / 1000));
+  countdownEl.textContent = `${days}天 ${hours}小时 ${minutes}分 ${seconds}秒`;
+  overlay.style.display = 'flex';
+}
+
+function unlockAccess() {
+  accessUnlocked = true;
+  updateAccessGate();
+}
+
+function handleAccessSubmit(event) {
+  event.preventDefault();
+  const input = document.getElementById('accessPassword');
+  const message = document.getElementById('accessMessage');
+  if (!input || !message) return;
+  if (input.value.trim() === 'team18') {
+    unlockAccess();
+  } else {
+    message.textContent = '密码错误，请重试。';
+    message.style.color = '#fde68a';
+  }
+}
+
+function initAccessGate() {
+  const form = document.getElementById('accessForm');
+  if (form) {
+    form.addEventListener('submit', handleAccessSubmit);
+  }
+  updateAccessGate();
+  setInterval(updateAccessGate, 1000);
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  initAccessGate();
   initState();
   updateAll();
   showRulesModal();
