@@ -116,9 +116,9 @@ tr:hover { background: #f5f5f5; }
 
 .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
 .status-indicator.safe { background: #4caf50; }
-.status-indicator.low { background: #f43636; }
-.status-indicator.high { background: #ffbb00; }
-</style>   //以上为css格式
+.status-indicator.low { background: #f44336; }
+.status-indicator.high { background: #ff9800; }
+</style>
 </head>
 <body>
 <div class="container">
@@ -151,7 +151,7 @@ tr:hover { background: #f5f5f5; }
           <div class="legend-item"><div class="legend-color" style="background:#4caf50"></div>安全区间 (20%-80%)</div>
           <div class="legend-item"><div class="legend-color" style="background:#f44336"></div>缺车风险 (<20%)</div>
           <div class="legend-item"><div class="legend-color" style="background:#ff9800"></div>满桩风险 (>80%)</div>
-          <div class="legend-item"><div class="legend-color" style="background:#00d5ff"></div>调度中心</div>
+          <div class="legend-item"><div class="legend-color" style="background:#00b4db"></div>调度中心</div>
         </div>
       </div>
 
@@ -187,7 +187,7 @@ tr:hover { background: #f5f5f5; }
       </div>
     </div>
   </div>
-</div>  //以上为html格式
+</div>
 
 <script>
 const stations = [
@@ -218,7 +218,7 @@ const demandData = [
   {time: 540, S01:{b:4,r:0}, S02:{b:4,r:0}, S03:{b:4,r:0}, S04:{b:4,r:0}, S05:{b:0,r:8}, S06:{b:0,r:8}, S07:{b:0,r:6}, S08:{b:0,r:5}, S09:{b:0,r:1}, S10:{b:0,r:0}, S11:{b:0,r:1}, S12:{b:0,r:0}, S13:{b:6,r:0}, S14:{b:0,r:3}}
 ];
 
-const timeLabels = ['06:30','07:00','07:30','08:00','08:30','09:00','09:30'];  //以上为各站点坐标及库存、需求数据的时间标签
+const timeLabels = ['06:30','07:00','07:30','08:00','08:30','09:00','09:30'];
 
 let state = {
   inventory: {},
@@ -246,7 +246,7 @@ function getStatus(inv, cap) {
 
 function initState() {
   stations.forEach(s => state.inventory[s.id] = s.init);
-}  //以上为各站点的初始状态
+}
 
 function renderMap() {
   const container = document.getElementById('mainMap');
@@ -342,7 +342,7 @@ function renderMap() {
 
     const minusBtn = document.createElementNS(svgNS, 'g');
     minusBtn.setAttribute('class', 'inv-btn');
-    minusBtn.setAttribute('transform', `translate(${-baseR - 12}, ${baseR + 42})`);
+    minusBtn.setAttribute('transform', `translate(${-baseR - 14}, 0)`);
     const minusCircle = document.createElementNS(svgNS, 'circle');
     minusCircle.setAttribute('r', 9); minusCircle.setAttribute('fill', '#f44336');
     minusBtn.appendChild(minusCircle);
@@ -357,7 +357,7 @@ function renderMap() {
 
     const plusBtn = document.createElementNS(svgNS, 'g');
     plusBtn.setAttribute('class', 'inv-btn');
-    plusBtn.setAttribute('transform', `translate(${baseR + 12}, ${baseR + 42})`);
+    plusBtn.setAttribute('transform', `translate(${baseR + 14}, 0)`);
     const plusCircle = document.createElementNS(svgNS, 'circle');
     plusCircle.setAttribute('r', 9); plusCircle.setAttribute('fill', '#4caf50');
     plusBtn.appendChild(plusCircle);
@@ -377,18 +377,18 @@ function renderMap() {
   const dcG = document.createElementNS(svgNS, 'g');
   dcG.setAttribute('class', 'station');
   dcG.setAttribute('transform', `translate(${scaleX(dc.x)}, ${scaleY(dc.y)})`);
-  const dcRect = document.createElementNS(svgNS, 'rect');
-  dcRect.setAttribute('x', -14); dcRect.setAttribute('y', -14);
-  dcRect.setAttribute('width', 28); dcRect.setAttribute('height', 28);
-  dcRect.setAttribute('rx', 4); dcRect.setAttribute('fill', '#00d5ff');
-  dcRect.setAttribute('stroke', '#333'); dcRect.setAttribute('stroke-width', '2');
-  dcG.appendChild(dcRect);
-  const dcLabel = document.createElementNS(svgNS, 'text');
-  dcLabel.setAttribute('y', -22); dcLabel.setAttribute('text-anchor', 'middle');
-  dcLabel.setAttribute('font-weight', 'bold'); dcLabel.setAttribute('font-size', '11px');
-  dcLabel.setAttribute('fill', '#00d5ff');
-  dcLabel.textContent = '调度中心';
-  dcG.appendChild(dcLabel);
+const dcRect = document.createElementNS(svgNS, 'rect');
+    dcRect.setAttribute('x', -14); dcRect.setAttribute('y', -14);
+    dcRect.setAttribute('width', 28); dcRect.setAttribute('height', 28);
+    dcRect.setAttribute('rx', 4); dcRect.setAttribute('fill', '#00b4db');
+    dcRect.setAttribute('stroke', '#333'); dcRect.setAttribute('stroke-width', '2');
+    dcG.appendChild(dcRect);
+    const dcLabel = document.createElementNS(svgNS, 'text');
+    dcLabel.setAttribute('y', -22); dcLabel.setAttribute('text-anchor', 'middle');
+    dcLabel.setAttribute('font-weight', 'bold'); dcLabel.setAttribute('font-size', '11px');
+    dcLabel.setAttribute('fill', '#00b4db');
+    dcLabel.textContent = '调度中心';
+    dcG.appendChild(dcLabel);
   svg.appendChild(dcG);
 
   container.appendChild(svg);
@@ -427,7 +427,7 @@ function renderStationList() {
     `;
   });
   container.innerHTML = html;
-}   //以上为图层渲染
+}
 
 function renderStats() {
   const params = getParams();
@@ -763,7 +763,7 @@ function runSimulation() {
       });
     }
   }, 100);
-}   //以上为业务逻辑
+}
 
 function showStationDetail(s) {
   const params = getParams();
@@ -895,6 +895,6 @@ window.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('resize', () => {
   renderMap();
 });
-</script> //以上为交互与工具逻辑
+</script>
 </body>
 </html>
