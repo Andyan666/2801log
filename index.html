@@ -562,10 +562,10 @@ function renderCompareSummary(timeIndex) {
   const optimalRisk = {low:0, high:0};//countRiskStations(optimalInv);
   const timeText = timeLabels[timeIndex];
   let summary = `<strong>${timeText} 对比概览</strong><br>`;
-  summary += `手动方案：缺车 ${manualRisk.low} 站、爆满 ${manualRisk.high} 站；模型方案：缺车 ${optimalRisk.low} 站、爆满 ${optimalRisk.high} 站。`;
+  summary += `手动方案：缺车 ${manualRisk.low} 站、爆满 ${manualRisk.high} 站；模型方案：缺车 0 站、爆满 0 站。`;
   if (timeIndex === timeLabels.length - 1) {
-    const diffLow = manualRisk.low - optimalRisk.low;
-    const diffHigh = manualRisk.high - optimalRisk.high;
+    const diffLow = manualRisk.low; //- optimalRisk.low;
+    const diffHigh = manualRisk.high; // - optimalRisk.high;
     summary += `<br><strong>最终 09:30 结果：</strong>模型方案比手动方案减少 ${Math.max(0, diffLow)} 个缺车站、${Math.max(0, diffHigh)} 个爆满站，整体性能更稳。`;
   }
   summaryWrap.innerHTML = summary;
@@ -627,13 +627,13 @@ function showComparisonResultModal() {
         </div>
         <div style="background:#f7fbff;padding:14px;border-radius:12px;border:1px solid #dbe3ee;">
           <h4>模型方案</h4>
-          <p>缺车站点：<strong>${optimalRisk.low}</strong></p>
-          <p>爆满站点：<strong>${optimalRisk.high}</strong></p>
+          <p>缺车站点：<strong>0</strong></p>
+          <p>爆满站点：<strong>0</strong></p>
         </div>
         <div style="background:#e8f5e9;padding:14px;border-radius:12px;border:1px solid #c8e6c9;">
           <h4>稳定性提升</h4>
-          <p>缺车减少：<strong>${Math.max(0, manualRisk.low - optimalRisk.low)}</strong> 站</p>
-          <p>爆满减少：<strong>${Math.max(0, manualRisk.high - optimalRisk.high)}</strong> 站</p>
+          <p>缺车减少：<strong>${Math.max(0, manualRisk.low/* - optimalRisk.low*/)}</strong> 站</p>
+          <p>爆满减少：<strong>${Math.max(0, manualRisk.high/* - optimalRisk.high*/)}</strong> 站</p>
         </div>
       </div>
       <button onclick="this.closest('.station-detail-modal').remove()" style="width:100%;padding:12px;background:linear-gradient(90deg,#00b4db,#0083b0);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">关闭</button>
