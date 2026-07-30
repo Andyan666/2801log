@@ -183,10 +183,11 @@ tr:hover { background: #f5f5f5; }
         <div class="panel-title-row">
           <h2>🗺️ 互动调度地图</h2>
           <div class="panel-actions">
+            <button id="batchToolBtn" type="button" class="panel-toggle-btn active" onclick="openToolModal('batch')">📝 批量输入</button>
             <button id="stationToolBtn" type="button" class="panel-toggle-btn" onclick="openToolModal('station')">📋 站点库存控制</button>
           </div>
         </div>
-        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">站点库存控制</span>按钮，调整各站点共享单车初始库存，如不修改，则以图中所示为默认值</p>
+        <p style="color:#666; font-size:12px; margin-bottom:10px;">点击<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">批量输入</span>按钮或<span style="color:rgba(50, 100, 250, 0.5); font-weight:bold;">站点库存控制</span>按钮，调整各站点共享单车初始库存，如不修改，则以图中所示为默认值</p>
         <p style="color:#666; font-size:12px; margin-bottom:10px;">点击站点上的 <span style="color:#f44336; font-weight:bold;">-</span> 和 <span style="color:#4caf50; font-weight:bold;">+</span> 按钮调度各站点共享单车数量，或点击站点查看详情</p>
         <div class="map-container" id="mainMap"></div>
         <div class="legend">
@@ -236,9 +237,9 @@ tr:hover { background: #f5f5f5; }
       </div>
 
       <div class="panel">
-        <h2>📊 手动调度后的模拟预测结果</h2>
+        <h2>📊 模拟预测结果</h2>
         <div id="resultArea">
-          <p style="color:#666; text-align:center; padding:30px;">调度后点击"运行手动调度后的模拟预测"查看结果</p>
+          <p style="color:#666; text-align:center; padding:30px;">调度后点击"运行模拟预测"查看结果</p>
         </div>
       </div>
     </div>
@@ -341,7 +342,7 @@ function applyFlowToInventory(baseInventory, flow) {
 
 function getOptimalStartInventory(baseInventory) {
   const result = minCostFlowScheduling();
-  const optimalInventory = applyFlowToInventory(baseInventory, result.flow);
+  const optimalInventory = result.startInventory ? cloneInventory(result.startInventory) : applyFlowToInventory(baseInventory, result.flow);
   compareState.optimalResult = result;
   compareState.flowEdges = Object.entries(result.moves).map(([key, qty]) => {
     const [from, to] = key.split('->');
@@ -559,14 +560,17 @@ function renderCompareSummary(timeIndex) {
   const manualInv = compareState.manualTimeline[timeIndex];
   const optimalInv = compareState.optimalTimeline[timeIndex];
   const manualRisk = countRiskStations(manualInv);
-  const optimalRisk = {low:0, high:0};//countRiskStations(optimalInv);
+  const optimalRisk = countRiskStations(optimalInv);
   const timeText = timeLabels[timeIndex];
   let summary = `<strong>${timeText} 对比概览</strong><br>`;
-  summary += `手动方案：缺车 ${manualRisk.low} 站、爆满 ${manualRisk.high} 站；模型方案：缺车 0 站、爆满 0 站。`;
+  summary += `手动方案：缺车 ${manualRisk.low} 站、爆满 ${manualRisk.high} 站；模型方案：缺车 ${optimalRisk.low} 站、爆满 ${optimalRisk.high} 站。`;
   if (timeIndex === timeLabels.length - 1) {
-    const diffLow = manualRisk.low; //- optimalRisk.low;
-    const diffHigh = manualRisk.high; // - optimalRisk.high;
-    summary += `<br><strong>最终 09:30 结果：</strong>模型方案比手动方案减少 ${Math.max(0, diffLow)} 个缺车站、${Math.max(0, diffHigh)} 个爆满站，整体性能更稳。`;
+    const diffLow = manualRisk.low - optimalRisk.low;
+    const diffHigh = manualRisk.high - optimalRisk.high;
+    const safeText = optimalRisk.low === 0 && optimalRisk.high === 0
+      ? '已实现零缺车与零爆满，优于手动方案'
+      : '当前模型方案仍有风险，需继续优化';
+    summary += `<br><strong>最终 09:30 结果：</strong>${safeText}，减少 ${Math.max(0, diffLow)} 个缺车站、${Math.max(0, diffHigh)} 个爆满站。`;
   }
   summaryWrap.innerHTML = summary;
   summaryWrap.classList.add('show');
@@ -627,13 +631,14 @@ function showComparisonResultModal() {
         </div>
         <div style="background:#f7fbff;padding:14px;border-radius:12px;border:1px solid #dbe3ee;">
           <h4>模型方案</h4>
-          <p>缺车站点：<strong>0</strong></p>
-          <p>爆满站点：<strong>0</strong></p>
+          <p>缺车站点：<strong>${optimalRisk.low}</strong></p>
+          <p>爆满站点：<strong>${optimalRisk.high}</strong></p>
         </div>
         <div style="background:#e8f5e9;padding:14px;border-radius:12px;border:1px solid #c8e6c9;">
           <h4>稳定性提升</h4>
-          <p>缺车减少：<strong>${Math.max(0, manualRisk.low/* - optimalRisk.low*/)}</strong> 站</p>
-          <p>爆满减少：<strong>${Math.max(0, manualRisk.high/* - optimalRisk.high*/)}</strong> 站</p>
+          <p>模型方案优于手动方案：<strong>${optimalRisk.low === 0 && optimalRisk.high === 0 ? '已实现零缺车与零爆满' : '仍需优化以满足安全区间'}</strong></p>
+          <p>缺车减少：<strong>${Math.max(0, manualRisk.low - optimalRisk.low)}</strong> 站</p>
+          <p>爆满减少：<strong>${Math.max(0, manualRisk.high - optimalRisk.high)}</strong> 站</p>
         </div>
       </div>
       <button onclick="this.closest('.station-detail-modal').remove()" style="width:100%;padding:12px;background:linear-gradient(90deg,#00b4db,#0083b0);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">关闭</button>
@@ -898,7 +903,7 @@ function resetAll() {
   initState();
   state.lastSimulation = null;
   document.getElementById('resultArea').innerHTML = 
-    '<p style="color:#666; text-align:center; padding:30px;">已重置为初始状态，点击"运行手动调度后的模拟预测"查看结果</p>';
+    '<p style="color:#666; text-align:center; padding:30px;">已重置为初始状态，点击"运行模拟预测"查看结果</p>';
   updateAll();
 }
 
@@ -916,7 +921,7 @@ function applyBatch() {
   });
   state.lastSimulation = null;
   document.getElementById('resultArea').innerHTML = 
-    '<p style="color:#666; text-align:center; padding:30px;">已应用批量输入，点击"运行手动调度后的模拟预测"查看结果</p>';
+    '<p style="color:#666; text-align:center; padding:30px;">已应用批量输入，点击"运行模拟预测"查看结果</p>';
   updateAll();
 }
 
@@ -1014,159 +1019,125 @@ function greedyScheduling() {
   return {moves, flow};
 }
 
-function computeFinalInv(flow) {
+function computeCumulativeDemand() {
   const params = getParams();
-  const inv = {};
-  stations.forEach(s => inv[s.id] = state.inventory[s.id] + (flow[s.id] || 0));
-  demandData.forEach(period => {
-    stations.forEach(s => {
+  const cumulative = {};
+  stations.forEach(s => {
+    cumulative[s.id] = 0;
+    demandData.forEach(period => {
       const d = period[s.id];
-      inv[s.id] += d.r * params.factor - d.b * params.factor;
+      cumulative[s.id] += d.r * params.factor - d.b * params.factor;
     });
   });
-  return inv;
+  return cumulative;
+}
+
+function buildFeasibleOptimalStart(baseInventory) {
+  const params = getParams();
+  const cumulativeDemand = computeCumulativeDemand();
+  const startLow = {};
+  const startHigh = {};
+  const targetStart = {};
+  let totalLow = 0;
+  let totalHigh = 0;
+
+  stations.forEach(s => {
+    const lowFinal = params.lowTarget * s.cap;
+    const highFinal = params.highTarget * s.cap;
+    const lowStart = Math.max(0, Math.ceil(lowFinal - cumulativeDemand[s.id]));
+    const highStart = Math.min(s.cap, Math.floor(highFinal - cumulativeDemand[s.id]));
+    startLow[s.id] = lowStart;
+    startHigh[s.id] = highStart;
+    targetStart[s.id] = lowStart;
+    totalLow += lowStart;
+    totalHigh += highStart;
+  });
+
+  const currentTotal = Object.values(baseInventory).reduce((sum, v) => sum + v, 0);
+  let remaining = currentTotal - totalLow;
+
+  const adjustableIds = stations.map(s => s.id).sort((a, b) => {
+    const capA = startHigh[a] - startLow[a];
+    const capB = startHigh[b] - startLow[b];
+    if (capB !== capA) return capB - capA;
+    return baseInventory[b] - baseInventory[a];
+  });
+
+  while (remaining > 0) {
+    let updated = false;
+    for (const id of adjustableIds) {
+      const extra = startHigh[id] - targetStart[id];
+      if (extra > 0) {
+        const add = Math.min(extra, remaining);
+        targetStart[id] += add;
+        remaining -= add;
+        updated = true;
+        if (remaining <= 0) break;
+      }
+    }
+    if (!updated) break;
+  }
+
+  if (remaining > 0) {
+    for (const id of stations.map(s => s.id)) {
+      const extra = getStation(id).cap - targetStart[id];
+      if (extra > 0) {
+        const add = Math.min(extra, remaining);
+        targetStart[id] += add;
+        remaining -= add;
+        if (remaining <= 0) break;
+      }
+    }
+  }
+
+  if (remaining < 0) {
+    let excess = -remaining;
+    for (const id of adjustableIds) {
+      const reducible = targetStart[id] - startLow[id];
+      if (reducible > 0) {
+        const sub = Math.min(reducible, excess);
+        targetStart[id] -= sub;
+        excess -= sub;
+        if (excess <= 0) break;
+      }
+    }
+  }
+
+  return targetStart;
 }
 
 function minCostFlowScheduling() {
-  const params = getParams();
-  
-  // 1. 计算无调度下的 09:30 库存
-  const finalInv = {};
-  stations.forEach(s => {
-    let curInv = state.inventory[s.id];
-    demandData.forEach(period => {
-      const d = period[s.id];
-      curInv += d.r * params.factor - d.b * params.factor;
-    });
-    finalInv[s.id] = curInv;
-  });
-
-  // 2. 构建供给/需求节点
-  // 供给：溢出站（库存 > 80%容量）
-  // 需求：有剩余容量的站（库存 < 80%容量）
-  const supply = {}; // 站点 -> 可调出量
-  const demand = {}; // 站点 -> 可调入量（剩余容量）
-  
-  stations.forEach(s => {
-    const inv = finalInv[s.id];
-    const cap = s.cap;
-    const highT = params.highTarget * cap;
-    
-    if (inv > highT) {
-      supply[s.id] = inv - highT; // 溢出量
-    } else if (inv < highT) {
-      demand[s.id] = highT - inv; // 剩余容量
-    }
-  });
-
-  const supplyNodes = Object.keys(supply);
-  const demandNodes = Object.keys(demand);
-  
-  if (supplyNodes.length === 0 || demandNodes.length === 0) {
-    return {moves: {}, flow: {}, totalCost: 0};
-  }
-
-  // 3. 最小费用流：成功最短增广路算法
-  const nS = supplyNodes.length;
-  const nD = demandNodes.length;
-  const N = nS + nD + 2;
-  const SRC = nS + nD;
-  const SNK = nS + nD + 1;
-
-  const adj = Array.from({length: N}, () => []);
-  
-  function addEdge(u, v, cap, cost) {
-    adj[u].push([v, cap, cost, adj[v].length]);
-    adj[v].push([u, 0, -cost, adj[u].length - 1]);
-  }
-
-  // 源点到供给节点
-  supplyNodes.forEach((s, i) => addEdge(SRC, i, supply[s], 0));
-  // 需求节点到汇点
-  demandNodes.forEach((d, j) => addEdge(nS + j, SNK, demand[d], 0));
-  // 供给到需求
-  supplyNodes.forEach((s, i) => {
-    demandNodes.forEach((d, j) => {
-      const sInfo = getStation(s);
-      const dInfo = getStation(d);
-      addEdge(i, nS + j, 18, dist(sInfo, dInfo)); // 单车容量上限18
-    });
-  });
-
-  // SPFA 最短增广路
-  let totalFlow = 0;
-  let totalCost = 0;
-  const maxFlow = Object.values(supply).reduce((a, b) => a + b, 0);
-
-  while (totalFlow < maxFlow) {
-    const distArr = Array(N).fill(Infinity);
-    const inQueue = Array(N).fill(false);
-    const prevV = Array(N).fill(-1);
-    const prevE = Array(N).fill(-1);
-    
-    distArr[SRC] = 0;
-    const q = [SRC];
-    inQueue[SRC] = true;
-    
-    while (q.length > 0) {
-      const u = q.shift();
-      inQueue[u] = false;
-      
-      for (let ei = 0; ei < adj[u].length; ei++) {
-        const [v, cap, cost, rev] = adj[u][ei];
-        if (cap > 0 && distArr[v] > distArr[u] + cost) {
-          distArr[v] = distArr[u] + cost;
-          prevV[v] = u;
-          prevE[v] = ei;
-          if (!inQueue[v]) {
-            q.push(v);
-            inQueue[v] = true;
-          }
-        }
-      }
-    }
-    
-    if (distArr[SNK] === Infinity) break;
-    
-    // 增广
-    let f = Infinity;
-    for (let v = SNK; v !== SRC; v = prevV[v]) {
-      const u = prevV[v];
-      const ei = prevE[v];
-      f = Math.min(f, adj[u][ei][1]);
-    }
-    
-    for (let v = SNK; v !== SRC; v = prevV[v]) {
-      const u = prevV[v];
-      const ei = prevE[v];
-      adj[u][ei][1] -= f;
-      const rev = adj[u][ei][3];
-      adj[v][rev][1] += f;
-      totalCost += f * adj[u][ei][2];
-    }
-    totalFlow += f;
-  }
-
-  // 4. 提取搬运方案
+  const targetStartInventory = buildFeasibleOptimalStart(state.inventory);
   const moves = {};
   const flow = {};
   stations.forEach(s => flow[s.id] = 0);
-  
-  supplyNodes.forEach((s, i) => {
-    for (const [v, cap, cost, rev] of adj[i]) {
-      if (v >= nS && v < nS + nD) {
-        const d = demandNodes[v - nS];
-        const used = adj[v][rev][1]; // 反向边容量 = 已用流量
-        if (used > 0) {
-          moves[`${s}->${d}`] = used;
-          flow[s] = (flow[s] || 0) - used;
-          flow[d] = (flow[d] || 0) + used;
-        }
-      }
-    }
-  });
 
-  return {moves, flow, totalCost: totalCost.toFixed(2)};
+  const sources = stations
+    .map(s => ({...s, available: state.inventory[s.id] - targetStartInventory[s.id]}))
+    .filter(s => s.available > 0)
+    .sort((a, b) => b.available - a.available);
+
+  const targets = stations
+    .map(s => ({...s, deficit: targetStartInventory[s.id] - state.inventory[s.id]}))
+    .filter(s => s.deficit > 0)
+    .sort((a, b) => b.deficit - a.deficit);
+
+  for (const src of sources) {
+    for (const tgt of targets) {
+      if (src.available <= 0) break;
+      if (tgt.deficit <= 0) continue;
+      const moveQty = Math.min(src.available, tgt.deficit);
+      if (moveQty <= 0) continue;
+      const key = `${src.id}->${tgt.id}`;
+      moves[key] = (moves[key] || 0) + moveQty;
+      flow[src.id] -= moveQty;
+      flow[tgt.id] += moveQty;
+      src.available -= moveQty;
+      tgt.deficit -= moveQty;
+    }
+  }
+
+  return {moves, flow, startInventory: cloneInventory(targetStartInventory), totalCost: 0};
 }
 
 function showSchedulingAnimation(moves, totalCost) {
@@ -1218,14 +1189,21 @@ function showSchedulingAnimation(moves, totalCost) {
 
 function applyAutoSched() {
   const result = minCostFlowScheduling();
-  
+
   // 显示调度动画
   showSchedulingAnimation(result.moves, result.totalCost);
-  
-  // 应用调度结果
-  stations.forEach(s => {
-    state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(state.inventory[s.id] + (result.flow[s.id] || 0))));
-  });
+
+  // 应用调度结果，优先使用可行起始库存
+  if (result.startInventory) {
+    stations.forEach(s => {
+      state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(result.startInventory[s.id] || 0)));
+    });
+  } else {
+    stations.forEach(s => {
+      state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(state.inventory[s.id] + (result.flow[s.id] || 0))));
+    });
+  }
+
   updateAll();
   runSimulation();
 }
@@ -1274,7 +1252,7 @@ function runSimulation() {
 
   let html = `
     <div class="result-panel ${panelClass}">
-      <h4>📊 手动调度后的模拟预测结果（需求系数 ${params.factor}x）</h4>
+      <h4>📊 模拟预测结果（需求系数 ${params.factor}x）</h4>
       <div class="progress-ring-container">
         <div class="progress-ring">
           <svg width="80" height="80">
@@ -1489,7 +1467,17 @@ function openToolModal(tool) {
   }
 
   if (tool === 'batch') {
-    pass;
+    body.innerHTML = `
+      <h3>📝 批量输入</h3>
+      <div class="batch-input-area">
+        <label>快速设置各站点库存（用逗号分隔，共14个值）：</label>
+        <input type="text" id="batchInput" placeholder="例如: 82,66,72,60,45,38,28,26,42,60,45,32,85,22">
+        <div class="btn-row">
+          <button onclick="applyBatch(); closeToolModal()" class="btn-primary">应用</button>
+          <button onclick="document.getElementById('batchInput').value=''" class="btn-warning">清空</button>
+        </div>
+      </div>
+    `;
   } else {
     body.innerHTML = `
       <h3>📋 站点库存控制</h3>
