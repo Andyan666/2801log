@@ -224,8 +224,11 @@ tr:hover { background: #f5f5f5; }
         </div>
         <div class="timeline-panel">
           <div class="timeline-header">
-            <span>时间:</span>
-            <strong id="currentTimeLabel">06:30</strong>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span>时间:</span>
+              <strong id="currentTimeLabel">06:30</strong>
+            </div>
+            <button type="button" class="btn-warning" style="font-size:12px; padding:4px 10px;" onclick="resetTimeline()">重置时间</button>
           </div>
           <input type="range" id="timeSlider" min="0" max="6" step="1" value="0" oninput="onTimelineChange(this.value)">
           <div class="timeline-labels">
@@ -599,6 +602,14 @@ function onTimelineChange(value) {
   if (compareState.timeIndex === timeLabels.length - 1) {
     showComparisonResultModal();
   }
+}
+
+function resetTimeline() {
+  const slider = document.getElementById('timeSlider');
+  if (!slider) return;
+  slider.value = 0;
+  compareState.timeIndex = 0;
+  renderCompareMaps();
 }
 
 function updateCompareView() {
