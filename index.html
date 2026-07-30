@@ -118,7 +118,7 @@ tr:hover { background: #f5f5f5; }
 .status-indicator.safe { background: #4caf50; }
 .status-indicator.low { background: #f44336; }
 .status-indicator.high { background: #ff9800; }
-</style>
+</style>   //以上为css格式
 </head>
 <body>
 <div class="container">
@@ -187,7 +187,7 @@ tr:hover { background: #f5f5f5; }
       </div>
     </div>
   </div>
-</div>
+</div>  //以上为html格式
 
 <script>
 const stations = [
@@ -218,7 +218,7 @@ const demandData = [
   {time: 540, S01:{b:4,r:0}, S02:{b:4,r:0}, S03:{b:4,r:0}, S04:{b:4,r:0}, S05:{b:0,r:8}, S06:{b:0,r:8}, S07:{b:0,r:6}, S08:{b:0,r:5}, S09:{b:0,r:1}, S10:{b:0,r:0}, S11:{b:0,r:1}, S12:{b:0,r:0}, S13:{b:6,r:0}, S14:{b:0,r:3}}
 ];
 
-const timeLabels = ['06:30','07:00','07:30','08:00','08:30','09:00','09:30'];
+const timeLabels = ['06:30','07:00','07:30','08:00','08:30','09:00','09:30'];  //以上为各站点坐标及库存、需求数据的时间标签
 
 let state = {
   inventory: {},
@@ -246,7 +246,7 @@ function getStatus(inv, cap) {
 
 function initState() {
   stations.forEach(s => state.inventory[s.id] = s.init);
-}
+}  //以上为各站点的初始状态
 
 function renderMap() {
   const container = document.getElementById('mainMap');
@@ -427,7 +427,7 @@ function renderStationList() {
     `;
   });
   container.innerHTML = html;
-}
+}   //以上为图层渲染
 
 function renderStats() {
   const params = getParams();
@@ -509,13 +509,14 @@ function applyBatch() {
   updateAll();
 }
 
-function minCostFlowScheduling() {
+function greedyScheduling() {
   const params = getParams();
+  const inv = {};
+  stations.forEach(s => inv[s.id] = state.inventory[s.id]);
   
-  // 1. 计算无调度下的 09:30 库存
   const finalInv = {};
   stations.forEach(s => {
-    let curInv = state.inventory[s.id];
+    let curInv = inv[s.id];
     demandData.forEach(period => {
       const d = period[s.id];
       curInv += d.r * params.factor - d.b * params.factor;
@@ -523,135 +524,83 @@ function minCostFlowScheduling() {
     finalInv[s.id] = curInv;
   });
 
-  // 2. 构建供给/需求节点
-  // 供给：溢出站（库存 > 80%容量）
-  // 需求：有剩余容量的站（库存 < 80%容量）
-  const supply = {}; // 站点 -> 可调出量
-  const demand = {}; // 站点 -> 可调入量（剩余容量）
-  
+  const needIn = {}, needOut = {};
   stations.forEach(s => {
-    const inv = finalInv[s.id];
-    const cap = s.cap;
-    const lowT = params.lowTarget * cap;
-    const highT = params.highTarget * cap;
-    
-    if (inv > highT) {
-      supply[s.id] = inv - highT; // 溢出量
-    } else if (inv < highT) {
-      demand[s.id] = highT - inv; // 剩余容量
+    if (finalInv[s.id] < params.lowTarget * s.cap) {
+      needIn[s.id] = params.lowTarget * s.cap - finalInv[s.id];
+    } else if (finalInv[s.id] > params.highTarget * s.cap) {
+      needOut[s.id] = finalInv[s.id] - params.highTarget * s.cap;
     }
   });
 
-  const supplyNodes = Object.keys(supply);
-  const demandNodes = Object.keys(demand);
-  
-  if (supplyNodes.length === 0 || demandNodes.length === 0) {
-    return {moves: {}, flow: {}};
+  const moves = {};
+  const remainingIn = {...needIn};
+  const remainingOut = {...needOut};
+  const flow = {};
+  stations.forEach(s => flow[s.id] = 0);
+
+  for (const target of Object.keys(remainingOut).sort((a,b) => remainingOut[b] - remainingOut[a])) {
+    let remain = remainingOut[target];
+    const candidates = Object.keys(remainingIn).filter(s => remainingIn[s] > 0)
+      .sort((a,b) => dist(getStation(a), getStation(b)) - dist(getStation(b), getStation(a)));
+    for (const src of candidates) {
+      if (remain <= 0) break;
+      const avail = remainingIn[src];
+      const qty = Math.floor(Math.min(remain, avail, 18));
+      if (qty > 0) {
+        moves[`${src}->${target}`] = qty;
+        flow[src] -= qty;
+        flow[target] += qty;
+        remainingIn[src] -= qty;
+        remainingOut[target] -= qty;
+        remain -= qty;
+      }
+    }
   }
 
-  // 3. 最小费用流：成功最短增广路算法
-  // 节点编号：0..n-1 供给，n..n+m-1 需求，SRC=n+m, SNK=n+m+1
-  const nS = supplyNodes.length;
-  const nD = demandNodes.length;
-  const N = nS + nD + 2;
-  const SRC = nS + nD;
-  const SNK = nS + nD + 1;
-
-  // 邻接表
-  const adj = Array.from({length: N}, () => []);
-  
-  function addEdge(u, v, cap, cost) {
-    adj[u].push([v, cap, cost, adj[v].length]);
-    adj[v].push([u, 0, -cost, adj[u].length - 1]);
-  }
-
-  // 源点到供给节点
-  supplyNodes.forEach((s, i) => addEdge(SRC, i, supply[s], 0));
-  // 需求节点到汇点
-  demandNodes.forEach((d, j) => addEdge(nS + j, SNK, demand[d], 0));
-  // 供给到需求
-  supplyNodes.forEach((s, i) => {
-    demandNodes.forEach((d, j) => {
-      const sInfo = getStation(s);
-      const dInfo = getStation(d);
-      addEdge(i, nS + j, 18, dist(sInfo, dInfo)); // 单车容量上限18
-    });
-  });
-
-  // SPFA 最短增广路
-  let totalFlow = 0;
-  let totalCost = 0;
-  const maxFlow = Object.values(supply).reduce((a, b) => a + b, 0);
-
-  while (totalFlow < maxFlow) {
-    const distArr = Array(N).fill(Infinity);
-    const inQueue = Array(N).fill(false);
-    const prevV = Array(N).fill(-1);
-    const prevE = Array(N).fill(-1);
-    
-    distArr[SRC] = 0;
-    const q = [SRC];
-    inQueue[SRC] = true;
-    
-    while (q.length > 0) {
-      const u = q.shift();
-      inQueue[u] = false;
-      
-      for (let ei = 0; ei < adj[u].length; ei++) {
-        const [v, cap, cost, rev] = adj[u][ei];
-        if (cap > 0 && distArr[v] > distArr[u] + cost) {
-          distArr[v] = distArr[u] + cost;
-          prevV[v] = u;
-          prevE[v] = ei;
-          if (!inQueue[v]) {
-            q.push(v);
-            inQueue[v] = true;
+  for (let iter = 0; iter < 3; iter++) {
+    const curInv = computeFinalInv(flow);
+    stations.forEach(s => {
+      const fInv = curInv[s.id];
+      if (fInv < params.lowTarget * s.cap) {
+        const need = Math.ceil(params.lowTarget * s.cap - fInv + 0.01);
+        for (const src of stations.sort((a,b) => dist(a,s) - dist(b,s))) {
+          if (need <= 0) break;
+          const srcFinal = curInv[src.id];
+          const avail = srcFinal - params.highTarget * src.cap;
+          if (avail > 0.5) {
+            const qty = Math.min(need, Math.floor(avail));
+            if (qty > 0) {
+              const key = `${src.id}->${s.id}`;
+              moves[key] = (moves[key] || 0) + qty;
+              flow[src.id] -= qty;
+              flow[s.id] += qty;
+              need -= qty;
+            }
+          }
+        }
+      } else if (fInv > params.highTarget * s.cap) {
+        const need = Math.ceil(fInv - params.highTarget * s.cap + 0.01);
+        for (const tgt of stations.sort((a,b) => dist(s,a) - dist(s,b))) {
+          if (need <= 0) break;
+          const tgtFinal = curInv[tgt.id];
+          const gap = params.highTarget * tgt.cap - tgtFinal;
+          if (gap > 0.5) {
+            const qty = Math.min(need, Math.ceil(gap));
+            if (qty > 0) {
+              const key = `${s.id}->${tgt.id}`;
+              moves[key] = (moves[key] || 0) + qty;
+              flow[s.id] -= qty;
+              flow[tgt.id] += qty;
+              need -= qty;
+            }
           }
         }
       }
-    }
-    
-    if (distArr[SNK] === Infinity) break;
-    
-    // 增广
-    let f = Infinity;
-    for (let v = SNK; v !== SRC; v = prevV[v]) {
-      const u = prevV[v];
-      const ei = prevE[v];
-      f = Math.min(f, adj[u][ei][1]);
-    }
-    
-    for (let v = SNK; v !== SRC; v = prevV[v]) {
-      const u = prevV[v];
-      const ei = prevE[v];
-      adj[u][ei][1] -= f;
-      const rev = adj[u][ei][3];
-      adj[v][rev][1] += f;
-      totalCost += f * adj[u][ei][2];
-    }
-    totalFlow += f;
+    });
   }
 
-  // 4. 提取搬运方案
-  const moves = {};
-  const flow = {};
-  stations.forEach(s => flow[s.id] = 0);
-  
-  supplyNodes.forEach((s, i) => {
-    for (const [v, cap, cost, rev] of adj[i]) {
-      if (v >= nS && v < nS + nD) {
-        const d = demandNodes[v - nS];
-        const used = adj[v][rev][1]; // 反向边容量 = 已用流量
-        if (used > 0) {
-          moves[`${s}->${d}`] = used;
-          flow[s] = (flow[s] || 0) - used;
-          flow[d] = (flow[d] || 0) + used;
-        }
-      }
-    }
-  });
-
-  return {moves, flow, totalCost: totalCost.toFixed(2)};
+  return {moves, flow};
 }
 
 function computeFinalInv(flow) {
@@ -668,16 +617,12 @@ function computeFinalInv(flow) {
 }
 
 function applyAutoSched() {
-  const result = minCostFlowScheduling();
+  const result = greedyScheduling();
   stations.forEach(s => {
     state.inventory[s.id] = Math.max(0, Math.min(s.cap, Math.round(state.inventory[s.id] + result.flow[s.id])));
   });
   updateAll();
   runSimulation();
-  
-  // 显示调度结果详情
-  const movesList = Object.entries(result.moves).map(([k, v]) => `${k}: ${v}辆`).join('、');
-  alert(`✅ 最优调度已应用（最小费用流）\n静态运输量: ${result.totalCost} 车·km\n搬运明细: ${movesList}`);
 }
 
 function runSimulation() {
@@ -818,7 +763,7 @@ function runSimulation() {
       });
     }
   }, 100);
-}
+}   //以上为业务逻辑
 
 function showStationDetail(s) {
   const params = getParams();
@@ -950,6 +895,6 @@ window.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('resize', () => {
   renderMap();
 });
-</script>
+</script> //以上为交互与工具逻辑
 </body>
 </html>
