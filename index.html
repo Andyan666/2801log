@@ -380,13 +380,13 @@ function renderMap() {
   const dcRect = document.createElementNS(svgNS, 'rect');
   dcRect.setAttribute('x', -14); dcRect.setAttribute('y', -14);
   dcRect.setAttribute('width', 28); dcRect.setAttribute('height', 28);
-  dcRect.setAttribute('rx', 4); dcRect.setAttribute('fill', '#ff3d00');
+  dcRect.setAttribute('rx', 4); dcRect.setAttribute('fill', '#00d5ff');
   dcRect.setAttribute('stroke', '#333'); dcRect.setAttribute('stroke-width', '2');
   dcG.appendChild(dcRect);
   const dcLabel = document.createElementNS(svgNS, 'text');
   dcLabel.setAttribute('y', -22); dcLabel.setAttribute('text-anchor', 'middle');
   dcLabel.setAttribute('font-weight', 'bold'); dcLabel.setAttribute('font-size', '11px');
-  dcLabel.setAttribute('fill', '00d5ff');
+  dcLabel.setAttribute('fill', '#00d5ff');
   dcLabel.textContent = '调度中心';
   dcG.appendChild(dcLabel);
   svg.appendChild(dcG);
